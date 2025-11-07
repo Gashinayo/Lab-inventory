@@ -1,7 +1,3 @@
-v3와 마찬가지로 requirements.txt 파일에는 4줄(streamlit, gspread, google-auth, pandas)이 필요합니다.
-
-Python
-
 import streamlit as st
 import gspread 
 import json 
@@ -271,3 +267,4 @@ with tab2:
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
     st.warning("기능 개발 중입니다. (v5)")
+
