@@ -7,19 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v2", layout="wide")
-st.title("🔬 실험실 재고 관리기 v2")
+st.set_page_config(page_title="실험실 재고 관리기 v3", layout="wide")
+st.title("🔬 실험실 재고 관리기 v3")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
+# (v2와 동일)
+REAGENT_DB_NAME = "Reagent_DB"  
+REAGENT_DB_TAB = "Master"       
+USAGE_LOG_NAME = "Usage_Log"    
+USAGE_LOG_TAB = "Log"           
 
-# ❗️❗️❗️ 이 부분은 연구원님의 시트 정보와 일치해야 합니다 ❗️❗️❗️
-REAGENT_DB_NAME = "Reagent_DB"  # 1. 시약 마스터 파일 이름
-REAGENT_DB_TAB = "Master"       # 2. 마스터 시트의 탭 이름
-USAGE_LOG_NAME = "Usage_Log"    # 3. [신규] 사용 기록 파일 이름
-USAGE_LOG_TAB = "Log"           # 4. [신규] 사용 기록 탭 이름
-
-# (1) 인증된 '클라이언트' 생성 (v1과 동일)
+# (1) 인증된 '클라이언트' 생성 (v2와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -27,17 +26,13 @@ def get_gspread_client():
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
         ]
-        # (로컬 테스트용 .streamlit/secrets.toml 또는 배포용 st.secrets 사용)
         if 'gcp_json_base64' in st.secrets:
-             # (배포용 코드)
             base64_string = st.secrets["gcp_json_base64"]
             json_string = base64.b64decode(base64_string).decode("utf-8")
             creds_dict = json.loads(json_string) 
             creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         else:
-             # (로컬 테스트용 코드)
             creds = Credentials.from_service_account_file('.streamlit/secrets.toml', scopes=scope)
-            
         client = gspread.authorize(creds)
         return client, None
     except FileNotFoundError:
@@ -45,9 +40,8 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# ▼▼▼ [신규] v2: 마스터 DB 로드 함수 ▼▼▼
-# (탭 2의 드롭다운을 채우기 위해 DB를 읽어옴)
-@st.cache_data(ttl=60) # 1분간 캐시
+# (2) 마스터 DB 로드 함수 (v2와 동일)
+@st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
         sh = _client.open(REAGENT_DB_NAME)
@@ -58,16 +52,19 @@ def load_reagent_db(_client):
             return pd.DataFrame(columns=["제품명", "Lot 번호"])
         
         df = pd.DataFrame(data)
-        # (Cat. No.가 추가되었으므로 컬럼 확인)
+        
+        # (v3: Cat. No. / Lot 번호를 문자열로 강제 변환 - int64 오류 방지)
         if "제품명" not in df.columns or "Lot 번호" not in df.columns:
              st.error("Reagent_DB 'Master' 탭에 '제품명' 또는 'Lot 번호' 컬럼이 없습니다.")
              return pd.DataFrame(columns=["제품명", "Lot 번호"])
+        
+        df['제품명'] = df['제품명'].astype(str)
+        df['Lot 번호'] = df['Lot 번호'].astype(str)
              
         return df
     except Exception as e:
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호"])
-# ▲▲▲ [신규] v2 ▲▲▲
 
 # --- 3. 앱 실행 ---
 client, auth_error_msg = get_gspread_client()
@@ -77,11 +74,10 @@ if auth_error_msg:
     st.warning("Secrets 설정, API 권한, 봇 초대를 확인하세요.")
     st.stop() 
 
-# (B) 탭 생성
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v1과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v2와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
@@ -125,7 +121,7 @@ with tab1:
                 
                 sheet.append_row(log_data_list)
                 st.success(f"✅ **{product_name} (Lot: {lot_no})**가 마스터 시트에 성공적으로 등록되었습니다!")
-                st.cache_data.clear() # (중요) DB 캐시 삭제 -> 탭 2 드롭다운에 즉시 반영
+                st.cache_data.clear() 
             
             except gspread.exceptions.SpreadsheetNotFound:
                 st.error(f"시트 파일 '{REAGENT_DB_NAME}'을(를) 찾을 수 없습니다. (이름/봇 초대 확인)")
@@ -135,13 +131,13 @@ with tab1:
                 st.error(f"Google Sheet 저장 실패: {e}")
 
 
-# --- 5. 탭 2: 시약 사용 (v2 신규) ---
+# --- 5. 탭 2: 시약 사용 (v3 수정됨) ---
 with tab2:
     st.header("📉 시약 사용 기록")
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
 
-    # (1) 마스터 DB에서 품목/Lot 목록 불러오기
+    # (1) 마스터 DB에서 품목/Lot 목록 불러오기 (v3에서 .astype(str)로 수정됨)
     df_db = load_reagent_db(client)
     
     if df_db.empty:
@@ -158,7 +154,6 @@ with tab2:
             
             # 2. Lot 번호 필터링
             if selected_product:
-                # 선택된 제품명에 해당하는 Lot 번호만 필터링
                 available_lots = sorted(
                     df_db[df_db['제품명'] == selected_product]['Lot 번호'].dropna().unique()
                 )
@@ -185,19 +180,20 @@ with tab2:
                     sh_log = client.open(USAGE_LOG_NAME)
                     sheet_log = sh_log.worksheet(USAGE_LOG_TAB)
                     
+                    # ▼▼▼ [수정됨] v3: int64 오류 방지를 위해 str() / float() 강제 변환 ▼▼▼
                     log_data_list = [
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Timestamp
-                        selected_product,
-                        selected_lot,
-                        float(usage_qty),
+                        str(selected_product), # 문자열로 변환
+                        str(selected_lot),     # 문자열로 변환 (핵심!)
+                        float(usage_qty),      # float으로 변환
                         user,
                         notes
                     ]
+                    # ▲▲▲ [수정됨] v3 ▲▲▲
                     
                     sheet_log.append_row(log_data_list)
                     st.success(f"✅ **{selected_product} (Lot: {selected_lot})** 사용 기록이 저장되었습니다!")
                     
-                    # (캐시 클리어 - 대시보드 즉시 반영을 위해)
                     st.cache_data.clear()
 
                 except gspread.exceptions.SpreadsheetNotFound:
@@ -211,4 +207,4 @@ with tab2:
 # --- 6. 탭 3: 대시보드 (재고 현황) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
-    st.warning("기능 개발 중입니다. (v3)")
+    st.warning("기능 개발 중입니다. (v4)")
