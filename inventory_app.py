@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v5", layout="wide")
-st.title("🔬 실험실 재고 관리기 v5")
+st.set_page_config(page_title="실험실 재고 관리기 v6", layout="wide")
+st.title("🔬 실험실 재고 관리기 v6")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v4와 동일)
+# (v5와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v4와 동일)
+# (1) 인증된 '클라이언트' 생성 (v5와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v4와 동일)
+# (2) 마스터 DB 로드 함수 (v5와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -66,7 +66,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위"])
 
-# (3) 사용 기록(Log) 로드 함수 (v4와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v5와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -79,7 +79,6 @@ def load_usage_log(_client):
         df = pd.DataFrame(data)
         
         if "제품명" not in df.columns or "Lot 번호" not in df.columns or "사용량" not in df.columns:
-             # (v4에서 이 에러가 발생한 것입니다!)
              st.error("Usage_Log 'Log' 탭에 '제품명', 'Lot 번호', '사용량' 컬럼이 없습니다. (1행 헤더 확인)")
              return pd.DataFrame(columns=["제품명", "Lot 번호", "사용량"])
         
@@ -103,13 +102,13 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v4와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v5와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     st.divider()
 
-    with st.form(key="new_item_form"): # (clear_on_submit=True 제거됨)
+    with st.form(key="new_item_form"): # (clear_on_submit=False)
         col1, col2 = st.columns(2)
         with col1:
             st.write("**필수 정보**")
@@ -157,13 +156,13 @@ with tab1:
                 st.error(f"Google Sheet 저장 실패: {e}")
 
 
-# --- 5. 탭 2: 시약 사용 (v5 수정됨) ---
+# --- 5. 탭 2: 시약 사용 (v6 수정됨) ---
 with tab2:
     st.header("📉 시약 사용 기록")
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
 
-    # (1) 마스터 DB와 사용기록 Log 모두 불러오기 (v4와 동일)
+    # (1) 마스터 DB와 사용기록 Log 모두 불러오기 (v5와 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client) 
     
@@ -171,17 +170,14 @@ with tab2:
         st.error("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다. '새 품목 등록' 탭에서 먼저 품목을 등록하세요.")
     else:
         # (2) 폼 생성
-        
-        # ▼▼▼ [수정됨] v5: clear_on_submit=True 제거 ▼▼▼
-        # (제출 후 성공 메시지가 사라지지 않도록 함)
-        with st.form(key="usage_form"): 
-        # ▲▲▲ [수정됨] v5 ▲▲▲
+        with st.form(key="usage_form"): # (clear_on_submit=False)
             
-            # (3) 동적 드롭다운
+            # (3) 동적 드롭다운 (v5와 동일)
             all_products = sorted(df_db['제품명'].dropna().unique())
             selected_product = st.selectbox("사용한 제품명*", options=all_products)
             
             if selected_product:
+                # (v5 로직: 제품명에 따라 Lot 번호를 정확히 필터링)
                 available_lots = sorted(
                     df_db[df_db['제품명'] == selected_product]['Lot 번호'].dropna().unique()
                 )
@@ -189,7 +185,9 @@ with tab2:
             else:
                 selected_lot = st.selectbox("Lot 번호*", options=["제품명을 먼저 선택하세요"])
 
-            # (4) 현재 재고 자동 계산 표시 (v4와 동일)
+            # (4) 현재 재고 자동 계산 표시 (v5와 동일)
+            current_stock = 0.0 # (기본값)
+            unit = ""
             if selected_product and selected_lot:
                 try:
                     item_info = df_db[
@@ -223,12 +221,19 @@ with tab2:
             submit_usage_button = st.form_submit_button(label="📉 사용 기록하기")
 
         if submit_usage_button:
-            # (6) 유효성 검사 (v4와 동일)
+            # (6) 유효성 검사
             if not all([selected_product, selected_lot, usage_qty > 0, user]):
                 st.error("필수 항목(*)을 모두 입력해야 합니다. (사용량은 0보다 커야 함)")
+            
+            # ▼▼▼ [신규] v6: 재고 검증 로직 ▼▼▼
+            elif float(usage_qty) > current_stock:
+                shortage = float(usage_qty) - current_stock
+                st.error(f"⚠️ 재고 부족! 현재 재고({current_stock:.2f} {unit})보다 {shortage:.2f} {unit} 만큼 더 많이 입력했습니다.")
+            # ▲▲▲ [신규] v6 ▲▲▲
+            
             else:
+                # (7) Usage_Log 시트에 저장 (v5와 동일)
                 try:
-                    # (7) Usage_Log 시트에 저장 (v4와 동일)
                     sh_log = client.open(USAGE_LOG_NAME)
                     sheet_log = sh_log.worksheet(USAGE_LOG_TAB)
                     
@@ -242,7 +247,6 @@ with tab2:
                     ]
                     
                     sheet_log.append_row(log_data_list)
-                    # (이제 이 메시지가 사라지지 않고 보임)
                     st.success(f"✅ **{selected_product} (Lot: {selected_lot})** 사용 기록이 저장되었습니다!")
                     
                     st.cache_data.clear()
@@ -258,4 +262,4 @@ with tab2:
 # --- 6. 탭 3: 대시보드 (재고 현황) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
-    st.warning("기능 개발 중입니다. (v5)")
+    st.warning("기능 개발 중입니다. (v6)")
