@@ -1,4 +1,50 @@
-sh = _client.open(REAGENT_DB_NAME)
+import streamlit as st
+import gspread 
+import json 
+import base64 
+from google.oauth2.service_account import Credentials 
+import pandas as pd 
+from datetime import datetime
+
+# --- 1. 앱의 기본 설정 ---
+st.set_page_config(page_title="실험실 재고 관리기 v7", layout="wide")
+st.title("🔬 실험실 재고 관리기 v7")
+st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
+
+# --- 2. Google Sheets 인증 및 설정 ---
+# (v6와 동일)
+REAGENT_DB_NAME = "Reagent_DB"  
+REAGENT_DB_TAB = "Master"       
+USAGE_LOG_NAME = "Usage_Log"    
+USAGE_LOG_TAB = "Log"           
+
+# (1) 인증된 '클라이언트' 생성 (v6와 동일)
+@st.cache_resource(ttl=600)
+def get_gspread_client():
+    try:
+        scope = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        if 'gcp_json_base64' in st.secrets:
+            base64_string = st.secrets["gcp_json_base64"]
+            json_string = base64.b64decode(base64_string).decode("utf-8")
+            creds_dict = json.loads(json_string) 
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        else:
+            creds = Credentials.from_service_account_file('.streamlit/secrets.toml', scopes=scope)
+        client = gspread.authorize(creds)
+        return client, None
+    except FileNotFoundError:
+        return None, "로컬 Secrets 파일('.streamlit/secrets.toml')을 찾을 수 없습니다."
+    except Exception as e:
+        return None, f"Google 인증 실패: {e}"
+
+# (2) 마스터 DB 로드 함수 (v6와 동일)
+@st.cache_data(ttl=60) 
+def load_reagent_db(_client):
+    try:
+        sh = _client.open(REAGENT_DB_NAME)
         sheet = sh.worksheet(REAGENT_DB_TAB)
         data = sheet.get_all_records()
         if not data:
