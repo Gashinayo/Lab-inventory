@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v9", layout="wide")
-st.title("🔬 실험실 재고 관리기 v9")
+st.set_page_config(page_title="실험실 재고 관리기 v10", layout="wide")
+st.title("🔬 실험실 재고 관리기 v10")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v8과 동일)
+# (v9와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v8과 동일)
+# (1) 인증된 '클라이언트' 생성 (v9와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# ▼▼▼ [수정됨] v9: 유통기한 컬럼 추가 및 타입 변환 ▼▼▼
+# (2) 마스터 DB 로드 함수 (v9와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -53,17 +53,14 @@ def load_reagent_db(_client):
         
         df = pd.DataFrame(data)
         
-        # (대시보드에 필요한 모든 컬럼 확인)
         required_cols = ["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"]
         if not all(col in df.columns for col in required_cols):
              st.error(f"Reagent_DB 'Master' 탭에 {required_cols} 컬럼이 모두 필요합니다.")
              return pd.DataFrame(columns=required_cols)
         
-        # (타입 변환)
         df['제품명'] = df['제품명'].astype(str)
         df['Lot 번호'] = df['Lot 번호'].astype(str)
         df['최초 수량'] = pd.to_numeric(df['최초 수량'], errors='coerce').fillna(0)
-        # (유통기한을 날짜 형식으로 변환)
         df['유통기한'] = pd.to_datetime(df['유통기한'], errors='coerce') 
              
         return df
@@ -71,7 +68,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
 
-# (3) 사용 기록(Log) 로드 함수 (v8과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v9와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -107,7 +104,7 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v8과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v9와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
@@ -166,7 +163,7 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v8과 동일) ---
+# --- 5. 탭 2: 시약 사용 (v9와 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
@@ -257,7 +254,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v9 신규) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v10 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -281,7 +278,6 @@ with tab3:
             df_inventory = pd.merge(df_db, usage_summary, on=['제품명', 'Lot 번호'], how='left')
             df_inventory['총 사용량'] = df_inventory['총 사용량'].fillna(0) # 사용 기록 없으면 0
         else:
-            # (사용 기록이 아예 없는 경우)
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
@@ -291,23 +287,21 @@ with tab3:
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
+        # ▼▼▼ [신규] v10: 프로그레스 바를 위해 0~100 사이로 값 고정 ▼▼▼
+        df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
+        # ▲▲▲ [신규] v10 ▲▲▲
 
-        # --- 5. 자동 알림 ---
+        # --- 5. 자동 알림 (v9와 동일) ---
         st.subheader("🚨 자동 알림")
-        
         expiry_threshold_days = 30
         low_stock_threshold_percent = 20
+        today = pd.to_datetime(datetime.now().date()) 
         
-        today = pd.to_datetime(datetime.now().date()) # 오늘 날짜 (시간 제외)
-        
-        # (A) 유통기한 임박
-        df_inventory['유통기한'] = df_inventory['유통기한'].fillna(pd.NaT) # 빈 값 처리
+        df_inventory['유통기한'] = df_inventory['유통기한'].fillna(pd.NaT) 
         expiring_soon = df_inventory[
             (df_inventory['유통기한'] >= today) &
             (df_inventory['유통기한'] <= (today + pd.DateOffset(days=expiry_threshold_days)))
         ]
-        
-        # (B) 유통기한 만료
         expired = df_inventory[df_inventory['유통기한'] < today]
         
         if not expiring_soon.empty:
@@ -317,21 +311,19 @@ with tab3:
             st.error(f"**유통기한 만료**")
             st.dataframe(expired[['제품명', 'Lot 번호', '유통기한', '보관 위치']], use_container_width=True)
         
-        # (C) 재고 부족
+        # (v10에서 clip(0, 100) 했으므로 재고 0 초과 조건 불필요)
         low_stock = df_inventory[
             (df_inventory['재고 비율 (%)'] <= low_stock_threshold_percent) &
-            (df_inventory['현재 재고'] > 0) # (재고가 0인 것은 '소진')
+            (df_inventory['재고 비율 (%)'] > 0) # (0%는 '소진'으로 분류)
         ]
-        
-        # (D) 재고 소진
-        out_of_stock = df_inventory[df_inventory['현재 재고'] <= 0]
+        out_of_stock = df_inventory[df_inventory['재고 비율 (%)'] <= 0]
         
         if not low_stock.empty:
             st.warning(f"**재고 부족 (권장 재고 {low_stock_threshold_percent}% 이하)**")
             st.dataframe(low_stock[['제품명', 'Lot 번호', '현재 재고', '단위', '재고 비율 (%)']], use_container_width=True)
 
         if not out_of_stock.empty:
-            st.error(f"**재고 소진 (0 이하)**")
+            st.error(f"**재고 소진 (0% 이하)**")
             st.dataframe(out_of_stock[['제품명', 'Lot 번호', '현재 재고', '단위']], use_container_width=True)
 
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
@@ -339,10 +331,9 @@ with tab3:
 
         st.divider()
 
-        # --- 6. 전체 재고 현황 ---
+        # --- 6. 전체 재고 현황 (v10 수정됨) ---
         st.subheader("전체 재고 현황")
         
-        # (표시할 컬럼 순서 정리)
         display_columns = [
             "제품명", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
@@ -350,9 +341,23 @@ with tab3:
         ]
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
-        # (날짜 형식 예쁘게)
         if '유통기한' in available_columns:
-            df_inventory['유통기환 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
-            available_columns[available_columns.index('유통기한')] = '유통기환 (YYYY-MM-DD)'
+            # (날짜 형식 예쁘게)
+            df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
+            available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        st.dataframe(df_inventory[available_columns], use_container_width=True)
+        # ▼▼▼ [신규] v10: 재고 비율 프로그레스 바 적용 ▼▼▼
+        st.dataframe(
+            df_inventory[available_columns], 
+            use_container_width=True,
+            column_config={
+                "재고 비율 (%)": st.column_config.ProgressColumn(
+                    "재고 비율 (%)",
+                    help="현재 남은 재고의 비율 (0-100%)",
+                    format="%.1f%%", # 소수점 첫째 자리 %
+                    min_value=0,
+                    max_value=100,
+                ),
+            }
+        )
+        # ▲▲▲ [신규] v10 ▲▲▲
