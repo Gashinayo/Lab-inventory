@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v32", layout="wide")
-st.title("🔬 실험실 재고 관리기 v32")
+st.set_page_config(page_title="실험실 재고 관리기 v33", layout="wide")
+st.title("🔬 실험실 재고 관리기 v33")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v31과 동일)
+# (v32와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v31과 동일)
+# (1) 인증된 '클라이언트' 생성 (v32와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v31과 동일)
+# (2) 마스터 DB 로드 함수 (v32와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -68,7 +68,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
 
-# (3) 사용 기록(Log) 로드 함수 (v31과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v32와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -104,10 +104,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v31과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v32와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v31 탭1 코드 전체 생략 - 동일) ...
+    # ... (v32 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     st.divider()
     with st.form(key="new_item_form", clear_on_submit=True): 
@@ -158,10 +158,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v31과 동일) ---
+# --- 5. 탭 2: 시약 사용 (v32와 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v31 탭2 코드 전체 생략 - 동일) ...
+    # ... (v32 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client)
@@ -240,7 +240,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v32 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v33 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -248,14 +248,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v31과 동일)
+    # 1. 데이터 로드 (v32와 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v31과 동일)
+        # 2. 총 사용량 계산 (v32와 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -265,15 +265,16 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # 4. 현재 재고 및 비율 계산 (v31과 동일)
+        # (v32 방식: 컬럼 분리)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
-        df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0) # (0 미만만 0으로 고정)
-
-        # 5. 자동 알림 (v31과 동일)
+        df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
+        df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
+        
+        # 5. 자동 알림 (v32와 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         low_stock_threshold_percent = 20
@@ -305,80 +306,54 @@ with tab3:
             st.success("✅ 모든 재고가 양호합니다! (재고 20% 이상, 유통기한 30일 이상)")
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v32 수정됨) ---
+        # --- 6. 전체 재고 현황 (v33 수정됨) ---
         st.subheader("전체 재고 현황")
         
+        # (v32 방식: 컬럼 분리)
         display_columns = [
             "제품명", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
-            "재고 비율 (%)", "유통기한", "보관 위치", "등록자", "등록 날짜"
+            "재고 비율 (Bar)", "재고 %", # (두 컬럼으로 분리)
+            "유통기한", "보관 위치", "등록자", "등록 날짜"
         ]
+        
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
         if '유통기한' in available_columns:
             df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        # ▼▼▼ [수정됨] v32: v25(style.bar) + 예외처리 ▼▼▼
+        # ▼▼▼ [수정됨] v33: st.data_editor + 빨간색 텍스트 (apply_data_frame) ▼▼▼
         
-        def style_current_stock(stock):
-            """'현재 재고'가 0 이하면 빨간색 텍스트로 변경"""
-            if stock <= 0:
-                return "color: red; font-weight: bold;"
-            return "" 
+        def style_stock_red(val):
+            """ 0 이하일 때 빨간색 텍스트 """
+            return "color: red; font-weight: bold;" if val <= 0 else ""
 
-        try:
-            # (v25 방식: 컬러 막대그래프 + 빨간색 텍스트)
-            # (matplotlib이 requirements.txt에 있어야 함)
-            st.dataframe(
-                df_inventory[available_columns].style
-                .applymap(
-                    style_current_stock, 
-                    subset=['현재 재고'] 
-                )
-                .bar( 
-                    subset=['재고 비율 (%)'],
-                    align='left',
-                    cmap='RdYlGn', # Red-Yellow-Green colormap
-                    vmin=0, 
-                    vmax=100
-                )
-                .format({
-                    '현재 재고': '{:.2f}', 
-                    '총 사용량': '{:.0f}',  
-                    '재고 비율 (%)': '{:.1f}%' # (숫자 표시)
-                }),
-                
-                use_container_width=True
-            )
-        except ImportError:
-            # (Fallback: matplotlib이 requirements.txt에 없는 경우)
-            st.error("⚠️ `matplotlib` 라이브러리가 없어 컬러 막대그래프를 표시할 수 없습니다.")
-            st.info("GitHub의 `requirements.txt` 파일에 'matplotlib'을 추가하고 앱을 재부팅하세요.")
+        # (st.dataframe으로 Styler 적용)
+        st.dataframe(
+            df_inventory[available_columns].style
+            .applymap(style_stock_red, subset=['현재 재고'])
+            .format({
+                '총 사용량': '{:.0f}',  
+                '현재 재고': '{:.2f}',
+                '재고 %': '{:.1f}%'
+            }),
             
-            # (v31 방식: ProgressColumn)
-            st.data_editor( 
-                df_inventory[available_columns],
-                use_container_width=True,
-                disabled=True,
-                column_config={
-                    "재고 비율 (%)": st.column_config.ProgressColumn(
-                        "재고 비율 (%)",
-                        format="%.0f%%", 
-                        min_value=0,
-                        max_value=100,
-                    ),
-                    "현재 재고": st.column_config.NumberColumn(
-                        "현재 재고",
-                        format="%.2f",
-                    ),
-                    "총 사용량": st.column_config.NumberColumn(
-                        "총 사용량",
-                        format="%.0f",
-                    ),
-                }
-            )
-        except Exception as e:
-            st.error(f"대시보드 표 렌더링 중 오류 발생: {e}")
-            st.dataframe(df_inventory[available_columns], use_container_width=True) # (스타일 없이 표시)
-        # ▲▲▲ [수정됨] v32 ▲▲▲
+            use_container_width=True,
+            
+            # (ProgressColumn으로 막대그래프 구현)
+            column_config={
+                "재고 비율 (Bar)": st.column_config.ProgressColumn(
+                    "재고 비율", # (1. 막대그래프)
+                    format="", # (Request 1: 숫자 숨김)
+                    min_value=0,
+                    max_value=100,
+                ),
+                # (NumberColumn으로 숫자 표시 - Request 2: 색상 적용은 dataframe에서 불가)
+                "재고 %": st.column_config.NumberColumn(
+                    "%", 
+                    format="%.1f%%",
+                ),
+            }
+        )
+        # ▲▲▲ [수정됨] v33 ▲▲▲
