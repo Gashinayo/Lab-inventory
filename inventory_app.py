@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v23", layout="wide")
-st.title("🔬 실험실 재고 관리기 v23")
+st.set_page_config(page_title="실험실 재고 관리기 v24", layout="wide")
+st.title("🔬 실험실 재고 관리기 v24")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v22와 동일)
+# (v23과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v22와 동일)
+# (1) 인증된 '클라이언트' 생성 (v23과 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v22와 동일)
+# (2) 마스터 DB 로드 함수 (v23과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -68,7 +68,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
 
-# (3) 사용 기록(Log) 로드 함수 (v22와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v23과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -104,10 +104,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v22와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v23과 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v22 탭1 코드 전체 생략 - 동일) ...
+    # ... (v23 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     st.divider()
     with st.form(key="new_item_form", clear_on_submit=True): 
@@ -158,10 +158,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v22와 동일) ---
+# --- 5. 탭 2: 시약 사용 (v23과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v22 탭2 코드 전체 생략 - 동일) ...
+    # ... (v23 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client)
@@ -240,7 +240,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v23 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v24 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -248,14 +248,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v22와 동일)
+    # 1. 데이터 로드 (v23과 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v22와 동일)
+        # 2. 총 사용량 계산 (v23과 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -265,7 +265,7 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # 4. 현재 재고 및 비율 계산 (v22와 동일)
+        # 4. 현재 재고 및 비율 계산 (v23과 동일)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
@@ -273,7 +273,7 @@ with tab3:
         )
         df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0) # (0 미만만 0으로 고정)
 
-        # 5. 자동 알림 (v22와 동일)
+        # 5. 자동 알림 (v23과 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         low_stock_threshold_percent = 20
@@ -305,7 +305,7 @@ with tab3:
             st.success("✅ 모든 재고가 양호합니다! (재고 20% 이상, 유통기한 30일 이상)")
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v23 수정됨) ---
+        # --- 6. 전체 재고 현황 (v24 수정됨) ---
         st.subheader("전체 재고 현황")
         
         display_columns = [
@@ -316,23 +316,14 @@ with tab3:
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
         if '유통기한' in available_columns:
-            df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
+            df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        # ▼▼▼ [수정됨] v23: v19/v17의 style.bar(cmap='RdYlGn') (컬러 막대) 복구 ▼▼▼
+        # ▼▼▼ [수정됨] v24: v19/v17의 style.bar(cmap='RdYlGn') (컬러 막대) 복구 ▼▼▼
+        # (v12의 빨간색 텍스트 기능은 충돌 가능성으로 인해 우선 제외)
         
-        def style_current_stock(stock):
-            """'현재 재고'가 0 이하면 빨간색 텍스트로 변경"""
-            if stock <= 0:
-                return "color: red; font-weight: bold;"
-            return "" 
-
         st.dataframe(
             df_inventory[available_columns].style
-            .applymap(
-                style_current_stock, 
-                subset=['현재 재고'] 
-            )
             .bar( # (v19 방식: 컬러 막대그래프)
                 subset=['재고 비율 (%)'],
                 align='left',
@@ -348,4 +339,4 @@ with tab3:
             
             use_container_width=True
         )
-        # ▲▲▲ [수정됨] v23 ▲▲▲
+        # ▲▲▲ [수정됨] v24 ▲▲▲
