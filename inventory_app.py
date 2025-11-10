@@ -7,8 +7,8 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v24", layout="wide")
-st.title("🔬 실험실 재고 관리기 v24")
+st.set_page_config(page_title="실험실 재고 관리기 v25", layout="wide")
+st.title("🔬 실험실 재고 관리기 v25")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
@@ -240,7 +240,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v24 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v25 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -305,7 +305,7 @@ with tab3:
             st.success("✅ 모든 재고가 양호합니다! (재고 20% 이상, 유통기한 30일 이상)")
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v24 수정됨) ---
+        # --- 6. 전체 재고 현황 (v25 수정됨) ---
         st.subheader("전체 재고 현황")
         
         display_columns = [
@@ -316,15 +316,15 @@ with tab3:
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
         if '유통기한' in available_columns:
-            df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-m-%d')
+            df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        # ▼▼▼ [수정됨] v24: v19/v17의 style.bar(cmap='RdYlGn') (컬러 막대) 복구 ▼▼▼
-        # (v12의 빨간색 텍스트 기능은 충돌 가능성으로 인해 우선 제외)
+        # ▼▼▼ [수정됨] v25: style.applymap (빨간 텍스트)를 제외하고, style.bar (컬러 막대)만 사용 ▼▼▼
         
         st.dataframe(
             df_inventory[available_columns].style
-            .bar( # (v19 방식: 컬러 막대그래프)
+            # (v23의 .applymap(style_current_stock) 기능 제거 -> 충돌 방지)
+            .bar( # (v23 방식: 컬러 막대그래프)
                 subset=['재고 비율 (%)'],
                 align='left',
                 cmap='RdYlGn', # Red-Yellow-Green colormap
@@ -339,4 +339,4 @@ with tab3:
             
             use_container_width=True
         )
-        # ▲▲▲ [수정됨] v24 ▲▲▲
+        # ▲▲▲ [수정됨] v25 ▲▲▲
