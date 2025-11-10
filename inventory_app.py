@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v10", layout="wide")
-st.title("🔬 실험실 재고 관리기 v10")
+st.set_page_config(page_title="실험실 재고 관리기 v11", layout="wide")
+st.title("🔬 실험실 재고 관리기 v11")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v9와 동일)
+# (v10과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v9와 동일)
+# (1) 인증된 '클라이언트' 생성 (v10과 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v9와 동일)
+# (2) 마스터 DB 로드 함수 (v10과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -68,7 +68,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
 
-# (3) 사용 기록(Log) 로드 함수 (v9와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v10과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -104,9 +104,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v9와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v10과 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
+    # ... (v10 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     st.divider()
 
@@ -163,9 +164,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v9와 동일) ---
+# --- 5. 탭 2: 시약 사용 (v10과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
+    # ... (v10 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
 
@@ -254,7 +256,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v10 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v11 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -262,36 +264,32 @@ with tab3:
         st.cache_data.clear() # (데이터 캐시 지우기)
         st.rerun()
 
-    # 1. 데이터 로드
+    # 1. 데이터 로드 (v10과 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산
+        # 2. 총 사용량 계산 (v10과 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
-            
-            # 3. 마스터DB와 사용량 데이터 병합
             df_inventory = pd.merge(df_db, usage_summary, on=['제품명', 'Lot 번호'], how='left')
-            df_inventory['총 사용량'] = df_inventory['총 사용량'].fillna(0) # 사용 기록 없으면 0
+            df_inventory['총 사용량'] = df_inventory['총 사용량'].fillna(0) 
         else:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # 4. 현재 재고 및 비율 계산
+        # 4. 현재 재고 및 비율 계산 (v10과 동일)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
-        # ▼▼▼ [신규] v10: 프로그레스 바를 위해 0~100 사이로 값 고정 ▼▼▼
         df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
-        # ▲▲▲ [신규] v10 ▲▲▲
 
-        # --- 5. 자동 알림 (v9와 동일) ---
+        # --- 5. 자동 알림 (v10과 동일) ---
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         low_stock_threshold_percent = 20
@@ -311,10 +309,9 @@ with tab3:
             st.error(f"**유통기한 만료**")
             st.dataframe(expired[['제품명', 'Lot 번호', '유통기한', '보관 위치']], use_container_width=True)
         
-        # (v10에서 clip(0, 100) 했으므로 재고 0 초과 조건 불필요)
         low_stock = df_inventory[
             (df_inventory['재고 비율 (%)'] <= low_stock_threshold_percent) &
-            (df_inventory['재고 비율 (%)'] > 0) # (0%는 '소진'으로 분류)
+            (df_inventory['재고 비율 (%)'] > 0) 
         ]
         out_of_stock = df_inventory[df_inventory['재고 비율 (%)'] <= 0]
         
@@ -331,7 +328,7 @@ with tab3:
 
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v10 수정됨) ---
+        # --- 6. 전체 재고 현황 (v11 수정됨) ---
         st.subheader("전체 재고 현황")
         
         display_columns = [
@@ -342,22 +339,38 @@ with tab3:
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
         if '유통기한' in available_columns:
-            # (날짜 형식 예쁘게)
             df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        # ▼▼▼ [신규] v10: 재고 비율 프로그레스 바 적용 ▼▼▼
-        st.dataframe(
+        # ▼▼▼ [신규] v11: st.data_editor로 변경 및 '현재 재고' 스타일링 ▼▼▼
+        
+        def style_current_stock(stock):
+            """'현재 재고'가 0 이하면 빨간색 텍스트로 변경"""
+            if stock <= 0:
+                return "color: red; font-weight: bold;"
+            # (참고: 이 함수는 20% 임계값을 알 수 없으므로, 주황색은 '자동 알림' 섹션에서만 표시됩니다)
+            return ""
+
+        st.data_editor( # st.dataframe 대신 st.data_editor 사용
             df_inventory[available_columns], 
             use_container_width=True,
+            disabled=True, # (중요) 읽기 전용으로 설정
             column_config={
+                # (v10의 프로그레스 바는 그대로 유지)
                 "재고 비율 (%)": st.column_config.ProgressColumn(
                     "재고 비율 (%)",
                     help="현재 남은 재고의 비율 (0-100%)",
-                    format="%.1f%%", # 소수점 첫째 자리 %
+                    format="%.1f%%", 
                     min_value=0,
                     max_value=100,
                 ),
+                # (신규: '현재 재고' 컬럼에 스타일 적용)
+                "현재 재고": st.column_config.TextColumn(
+                    "현재 재고",
+                    help="현재 남은 재고 수량",
+                    format="%.2f", # 소수점 둘째 자리
+                    style=style_current_stock # (스타일 함수 적용)
+                ),
             }
         )
-        # ▲▲▲ [신규] v10 ▲▲▲
+        # ▲▲▲ [신규] v11 ▲▲▲
