@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v33", layout="wide")
-st.title("🔬 실험실 재고 관리기 v33")
+st.set_page_config(page_title="실험실 재고 관리기 v34", layout="wide")
+st.title("🔬 실험실 재고 관리기 v34")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v32와 동일)
+# (v33과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v32와 동일)
+# (1) 인증된 '클라이언트' 생성 (v33과 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v32와 동일)
+# (2) 마스터 DB 로드 함수 (v33과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -49,11 +49,11 @@ def load_reagent_db(_client):
         data = sheet.get_all_records()
         if not data:
             st.warning("마스터 시트(Reagent_DB)가 비어있습니다...")
-            return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
+            return pd.DataFrame(columns=["제품명", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한"])
         
         df = pd.DataFrame(data)
         
-        required_cols = ["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"]
+        required_cols = ["제품명", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한"]
         if not all(col in df.columns for col in required_cols):
              st.error(f"Reagent_DB 'Master' 탭에 {required_cols} 컬럼이 모두 필요합니다.")
              return pd.DataFrame(columns=required_cols)
@@ -68,7 +68,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "Lot 번호", "최초 수량", "단위", "유통기한"])
 
-# (3) 사용 기록(Log) 로드 함수 (v32와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v33과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -104,34 +104,87 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v32와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v34 수정됨) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v32 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
+    
+    # ▼▼▼ [신규] v34: 기존 정보 복사 기능 ▼▼▼
+    
+    # (1) 폼 바깥에서 DB 로드 (복사 기능용)
+    df_db_copy = load_reagent_db(client)
+    copied_data = {}
+    unit_options = ["mL", "L", "g", "kg", "개", "box", "kit"]
+
+    if not df_db_copy.empty:
+        if st.checkbox("🖨️ 기존 품목 정보 복사하기 (Cat.No., 단위, 위치)"):
+            all_products = sorted(df_db_copy['제품명'].dropna().unique())
+            
+            # (st.session_state를 사용하여 선택 기억)
+            if 'product_to_copy' not in st.session_state:
+                st.session_state.product_to_copy = all_products[0]
+                
+            selected_product_to_copy = st.selectbox(
+                "복사할 제품명 선택:", 
+                options=all_products, 
+                key="product_to_copy"
+            )
+            
+            if selected_product_to_copy:
+                # (가장 최근에 등록된 정보로 복사)
+                item_info = df_db_copy[
+                    df_db_copy['제품명'] == selected_product_to_copy
+                ].iloc[-1] # .iloc[0] -> .iloc[-1] (최신 정보)
+                
+                copied_data['product_name'] = item_info.get('제품명', '')
+                copied_data['cat_no'] = item_info.get('Cat. No.', '')
+                copied_data['unit'] = item_info.get('단위', 'mL')
+                copied_data['location'] = item_info.get('보관 위치', '')
+    
     st.divider()
+    # ▲▲▲ [신규] v34 ▲▲▲
+
     with st.form(key="new_item_form", clear_on_submit=True): 
         col1, col2 = st.columns(2)
         with col1:
             st.write("**필수 정보**")
-            product_name = st.text_input("제품명*", help="예: DMEM, 10% FBS")
-            cat_no = st.text_input("Cat. No.*", help="카탈로그 번호 (예: 11995-065)")
-            lot_no = st.text_input("Lot 번호*")
+            # (v34: value= 추가)
+            product_name = st.text_input("제품명*", 
+                                         value=copied_data.get('product_name', ''), 
+                                         help="예: DMEM, 10% FBS")
+            cat_no = st.text_input("Cat. No.*", 
+                                   value=copied_data.get('cat_no', ''), 
+                                   help="카탈로그 번호 (예: 11995-065)")
+            lot_no = st.text_input("Lot 번호*", 
+                                   help="새로 등록할 Lot 번호를 입력하세요.")
         with col2:
             st.write("**수량 및 보관 정보**")
             initial_qty = st.number_input("최초 수량*", min_value=0.0, step=1.0, format="%.2f")
-            unit = st.selectbox("단위*", ["mL", "L", "g", "kg", "개", "box", "kit"])
-            location = st.text_input("보관 위치", help="예: 4도 냉장고 A-1 선반, -20도 냉동고 B-3 박스")
+            
+            # (v34: index= 추가)
+            unit_index = unit_options.index(copied_data.get('unit')) if copied_data.get('unit') in unit_options else 0
+            unit = st.selectbox("단위*", 
+                                options=unit_options, 
+                                index=unit_index) 
+            
+            # (v34: value= 추가)
+            location = st.text_input("보관 위치", 
+                                     value=copied_data.get('location', ''), 
+                                     help="예: 4도 냉장고 A-1 선반...")
         st.divider()
         st.write("**기타 정보**")
         expiry_date = st.date_input("유통기한", datetime.now() + pd.DateOffset(years=1))
         registrant = st.text_input("등록자 이름*")
+
         submit_button = st.form_submit_button(label="✅ 신규 등록하기")
+
+    # (v33의 폼 제출 로직과 동일)
     if "form1_status" in st.session_state:
         if st.session_state.form1_status == "success": st.success(st.session_state.form1_message)
         else: st.error(st.session_state.form1_message)
         del st.session_state.form1_status
         del st.session_state.form1_message
+    
     if submit_button:
         if not all([product_name, cat_no, lot_no, initial_qty > 0, registrant]):
             st.session_state.form1_status = "error"
@@ -158,10 +211,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v32와 동일) ---
+# --- 5. 탭 2: 시약 사용 (v33과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v32 탭2 코드 전체 생략 - 동일) ...
+    # ... (v33 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client)
@@ -240,7 +293,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v33 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v34 수정됨 - v33/v27과 동일) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -248,14 +301,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v32와 동일)
+    # 1. 데이터 로드 (v33과 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v32와 동일)
+        # 2. 총 사용량 계산 (v33과 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -265,7 +318,7 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # (v32 방식: 컬럼 분리)
+        # (v33 방식: 컬럼 분리)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
@@ -274,7 +327,7 @@ with tab3:
         df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
         df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
         
-        # 5. 자동 알림 (v32와 동일)
+        # 5. 자동 알림 (v33과 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         low_stock_threshold_percent = 20
@@ -306,10 +359,9 @@ with tab3:
             st.success("✅ 모든 재고가 양호합니다! (재고 20% 이상, 유통기한 30일 이상)")
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v33 수정됨) ---
+        # --- 6. 전체 재고 현황 (v33/v27과 동일) ---
         st.subheader("전체 재고 현황")
         
-        # (v32 방식: 컬럼 분리)
         display_columns = [
             "제품명", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
@@ -323,37 +375,30 @@ with tab3:
             df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
-        # ▼▼▼ [수정됨] v33: st.data_editor + 빨간색 텍스트 (apply_data_frame) ▼▼▼
-        
-        def style_stock_red(val):
-            """ 0 이하일 때 빨간색 텍스트 """
-            return "color: red; font-weight: bold;" if val <= 0 else ""
-
-        # (st.dataframe으로 Styler 적용)
-        st.dataframe(
-            df_inventory[available_columns].style
-            .applymap(style_stock_red, subset=['현재 재고'])
-            .format({
-                '총 사용량': '{:.0f}',  
-                '현재 재고': '{:.2f}',
-                '재고 %': '{:.1f}%'
-            }),
-            
+        # (v33/v27 방식: data_editor + column_config)
+        st.data_editor( 
+            df_inventory[available_columns],
             use_container_width=True,
+            disabled=True, 
             
-            # (ProgressColumn으로 막대그래프 구현)
             column_config={
                 "재고 비율 (Bar)": st.column_config.ProgressColumn(
-                    "재고 비율", # (1. 막대그래프)
-                    format="", # (Request 1: 숫자 숨김)
+                    "재고 비율", 
+                    format="", # (숫자 숨김)
                     min_value=0,
                     max_value=100,
                 ),
-                # (NumberColumn으로 숫자 표시 - Request 2: 색상 적용은 dataframe에서 불가)
                 "재고 %": st.column_config.NumberColumn(
                     "%", 
-                    format="%.1f%%",
+                    format="%.1f%%", # % 표시
+                ),
+                "현재 재고": st.column_config.NumberColumn(
+                    "현재 재고",
+                    format="%.2f", 
+                ),
+                "총 사용량": st.column_config.NumberColumn(
+                    "총 사용량",
+                    format="%.0f", 
                 ),
             }
         )
-        # ▲▲▲ [수정됨] v33 ▲▲▲
