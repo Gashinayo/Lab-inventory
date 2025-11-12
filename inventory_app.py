@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v43", layout="wide")
-st.title("🔬 실험실 재고 관리기 v43")
+st.set_page_config(page_title="실험실 재고 관리기 v45", layout="wide")
+st.title("🔬 실험실 재고 관리기 v45")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v42와 동일)
+# (v44와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v42와 동일)
+# (1) 인증된 '클라이언트' 생성 (v44와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v42와 동일)
+# ▼▼▼ [수정됨] v45: '제조사' 컬럼 순서 변경 ▼▼▼
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -49,16 +49,19 @@ def load_reagent_db(_client):
         data = sheet.get_all_records()
         if not data:
             st.warning("마스터 시트(Reagent_DB)가 비어있습니다...")
-            return pd.DataFrame(columns=["제품명", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
+            return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
         
         df = pd.DataFrame(data)
         
-        required_cols = ["제품명", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "보관 위치", "등록 날짜", "등록자", "알림 기준 수량", "알림 무시"]
+        # (v45: A~L열 순서 확인)
+        required_cols = ["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "보관 위치", "등록 날짜", "등록자", "알림 기준 수량", "알림 무시"]
         if not all(col in df.columns for col in required_cols):
-             st.error(f"Reagent_DB 'Master' 탭에 {required_cols} 컬럼이 모두 필요합니다. (K열에 '알림 무시' 추가 확인)")
+             st.error(f"Reagent_DB 'Master' 탭에 {required_cols} 컬럼이 모두 필요합니다. (A~L열 순서 확인)")
              return pd.DataFrame(columns=required_cols)
         
+        # (타입 변환 - v44와 동일)
         df['제품명'] = df['제품명'].astype(str)
+        df['제조사'] = df['제조사'].astype(str) 
         df['Cat. No.'] = df['Cat. No.'].astype(str)
         df['Lot 번호'] = df['Lot 번호'].astype(str)
         df['최초 수량'] = pd.to_numeric(df['최초 수량'], errors='coerce').fillna(0)
@@ -72,6 +75,7 @@ def load_reagent_db(_client):
         
         df = df.sort_values(by='등록 날짜')
         
+        # (중복 Lot 합산 - v44와 동일)
         df_agg = df.groupby(['제품명', 'Cat. No.', 'Lot 번호'], as_index=False).agg(
             agg_qty=('최초 수량', 'sum'),       
             agg_alert_qty=('알림 기준 수량', 'last'), 
@@ -80,7 +84,8 @@ def load_reagent_db(_client):
             agg_expiry=('유통기한', 'last'),   
             agg_reg_date=('등록 날짜', 'last'),   
             agg_registrant=('등록자', 'last'),
-            agg_mute=('알림 무시', 'last') 
+            agg_mute=('알림 무시', 'last'),
+            agg_manufacturer=('제조사', 'last') 
         )
         
         df_agg = df_agg.rename(columns={
@@ -91,7 +96,8 @@ def load_reagent_db(_client):
             'agg_expiry': '유통기한',
             'agg_reg_date': '등록 날짜',
             'agg_registrant': '등록자',
-            'agg_mute': '알림 무시' 
+            'agg_mute': '알림 무시',
+            'agg_manufacturer': '제조사' 
         })
         
         df_agg['등록 날짜'] = df_agg['등록 날짜'].dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -100,9 +106,10 @@ def load_reagent_db(_client):
     
     except Exception as e:
         st.error(f"Reagent_DB 로드 실패: {e}")
-        return pd.DataFrame(columns=["제품명", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
+        return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
+# ▲▲▲ [수정됨] v45 ▲▲▲
 
-# (3) 사용 기록(Log) 로드 함수 (v42와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v44와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -138,16 +145,17 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v42와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v45 수정됨) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v42 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
+    
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
-    unit_options = ["mL", "L", "g", "kg", "개", "box", "kit"]
+    unit_options = ["개", "box", "kit", "mL", "L", "g", "kg"]
+
     if not df_db_copy.empty:
-        if st.checkbox("🖨️ 기존 품목 정보 복사하기 (Cat.No., 단위, 위치, 알림 기준)"): 
+        if st.checkbox("🖨️ 기존 품목 정보 복사하기 (Cat.No., 제조사, 단위, 위치, 알림 기준)"): 
             all_products = sorted(df_db_copy['제품명'].dropna().unique())
             if 'product_to_copy' not in st.session_state:
                 st.session_state.product_to_copy = all_products[0]
@@ -162,22 +170,31 @@ with tab1:
                 ].iloc[-1] 
                 copied_data['product_name'] = item_info.get('제품명', '')
                 copied_data['cat_no'] = item_info.get('Cat. No.', '')
-                copied_data['unit'] = item_info.get('단위', 'mL')
+                copied_data['manufacturer'] = item_info.get('제조사', '') 
+                copied_data['unit'] = item_info.get('단위', '개')
                 copied_data['location'] = item_info.get('보관 위치', '')
                 copied_data['alert_qty'] = item_info.get('알림 기준 수량', 10) 
     st.divider()
+    
     with st.form(key="new_item_form", clear_on_submit=True): 
         col1, col2 = st.columns(2)
         with col1:
             st.write("**필수 정보**")
             product_name = st.text_input("제품명*", value=copied_data.get('product_name', ''), help="예: DMEM, 10% FBS")
+            # (v45: 제조사 순서 변경)
+            manufacturer = st.text_input("제조사*", 
+                                         value=copied_data.get('manufacturer', ''), 
+                                         help="예: Thermo Fisher, Gibco, Merck")
             cat_no = st.text_input("Cat. No.*", value=copied_data.get('cat_no', ''), help="카탈로그 번호 (예: 11995-065)")
             lot_no = st.text_input("Lot 번호*", help="새로 등록할 Lot 번호를 입력하세요.")
+            
         with col2:
             st.write("**수량 및 알림**")
             initial_qty = st.number_input("최초 수량*", min_value=0.0, step=1.0, format="%.2f")
+            
             unit_index = unit_options.index(copied_data.get('unit')) if copied_data.get('unit') in unit_options else 0
             unit = st.selectbox("단위*", options=unit_options, index=unit_index) 
+            
             alert_qty = st.number_input(
                 "알림 기준 수량*", 
                 min_value=0.0, 
@@ -191,30 +208,42 @@ with tab1:
         location = st.text_input("보관 위치", value=copied_data.get('location', ''), help="예: 4도 냉장고 A-1 선반...")
         expiry_date = st.date_input("유통기한", datetime.now() + pd.DateOffset(years=1))
         registrant = st.text_input("등록자 이름*")
+
         submit_button = st.form_submit_button(label="✅ 신규 등록하기")
+
     if "form1_status" in st.session_state:
         if st.session_state.form1_status == "success": st.success(st.session_state.form1_message)
         else: st.error(st.session_state.form1_message)
         del st.session_state.form1_status
         del st.session_state.form1_message
+    
     if submit_button:
-        if not all([product_name, cat_no, lot_no, initial_qty > 0, registrant, alert_qty >= 0]):
+        # (v45: manufacturer 유효성 검사)
+        if not all([product_name, cat_no, lot_no, manufacturer, initial_qty > 0, registrant, alert_qty >= 0]):
             st.session_state.form1_status = "error"
             st.session_state.form1_message = "필수 항목(*)을 모두 입력해야 합니다. (최초 수량 > 0, 알림 기준 >= 0)"
         else:
             try:
                 sh = client.open(REAGENT_DB_NAME)
                 sheet = sh.worksheet(REAGENT_DB_TAB)
+                
+                # ▼▼▼ [수정됨] v45: log_data_list 순서 변경 (A~L열) ▼▼▼
                 log_data_list = [
-                    product_name, cat_no, lot_no,
-                    float(initial_qty), unit,
-                    expiry_date.strftime("%Y-%m-%d"), 
-                    location,
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
-                    registrant,
-                    float(alert_qty),
-                    "아니요" # (K열: 알림 무시)
+                    product_name,   # A
+                    manufacturer,   # B (신규 위치)
+                    cat_no,         # C
+                    lot_no,         # D
+                    float(initial_qty), # E
+                    unit,           # F
+                    expiry_date.strftime("%Y-%m-%d"), # G
+                    location,       # H
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # I
+                    registrant,     # J
+                    float(alert_qty), # K
+                    "아니요"         # L
                 ]
+                # ▲▲▲ [수정됨] v45 ▲▲▲
+                
                 sheet.append_row(log_data_list)
                 st.session_state.form1_status = "success"
                 st.session_state.form1_message = f"✅ **{product_name} (Lot: {lot_no})**가 마스터 시트에 성공적으로 등록되었습니다!"
@@ -225,10 +254,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v42와 동일) ---
+# --- 5. 탭 2: 시약 사용 (v44와 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v42 탭2 코드 전체 생략 - 동일) ...
+    # ... (v44 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client) 
@@ -309,7 +338,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v43 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v45 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -317,14 +346,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v42와 동일)
+    # 1. 데이터 로드 (v45: '제조사' 포함)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v42와 동일)
+        # 2. 총 사용량 계산 (v44와 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -334,7 +363,7 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # (v42 방식: 컬럼 분리)
+        # (v44 방식: 컬럼 분리)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
@@ -343,7 +372,7 @@ with tab3:
         df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
         df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
         
-        # 5. 자동 알림 (v42와 동일)
+        # 5. 자동 알림 (v44와 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
@@ -390,7 +419,7 @@ with tab3:
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
         
-        # (v42의 알림 해제 섹션)
+        # (v44의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
         
@@ -415,19 +444,16 @@ with tab3:
                         all_data = sheet_db.get_all_records()
                         target_rows = []
                         for i, record in enumerate(all_data):
-                            
-                            # ▼▼▼ [수정됨] v43: str() 강제 변환으로 숫자/문자 비교 오류 해결 ▼▼▼
                             if (str(record['제품명']) == product_to_mute and 
                                 str(record['Lot 번호']) == lot_to_mute):
-                            # ▲▲▲ [수정됨] v43 ▲▲▲
-                                
-                                target_rows.append(i + 2) # (+1 for header, +1 for 0-index)
+                                target_rows.append(i + 2) 
                         
                         if not target_rows:
                             st.error(f"시트에서 '{selected_item_to_mute}'을(를) 찾지 못했습니다. (데이터 확인 필요)")
                         else:
+                            # (v45: K열(11) -> L열(12)로 '알림 무시' 컬럼 위치 변경)
                             for row_index in target_rows:
-                                sheet_db.update_cell(row_index, 11, "예") # 11 = K열
+                                sheet_db.update_cell(row_index, 12, "예") # 12 = L열
                             
                             st.success(f"✅ '{product_to_mute}' (Lot: {lot_to_mute}) 품목이 알림에서 해제되었습니다.")
                             st.cache_data.clear()
@@ -440,7 +466,7 @@ with tab3:
             
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v42와 동일) ---
+        # --- 6. 전체 재고 현황 (v45 수정됨) ---
         st.subheader("전체 재고 현황")
         
         search_query = st.text_input(
@@ -448,14 +474,15 @@ with tab3:
             placeholder="DMEM, 1111, 2222dd 등으로 검색..."
         )
         
+        # ▼▼▼ [수정됨] v45: '제조사' 컬럼 순서 변경 ▼▼▼
         display_columns = [
-            "제품명", "Cat. No.", "Lot 번호", 
+            "제품명", "제조사", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
             "재고 비율 (Bar)", "재고 %", 
-            "알림 기준 수량", 
-            "알림 무시", 
+            "알림 기준 수량", "알림 무시", 
             "유통기한", "보관 위치", "등록자", "등록 날짜"
         ]
+        # ▲▲▲ [수정됨] v45 ▲▲▲
         
         available_columns = [col for col in display_columns if col in df_inventory.columns]
         
@@ -469,12 +496,13 @@ with tab3:
             query = search_query.lower() 
             mask = (
                 df_display['제품명'].astype(str).str.lower().str.contains(query) |
+                df_display['제조사'].astype(str).str.lower().str.contains(query) | # (v44 검색 로직)
                 df_display['Cat. No.'].astype(str).str.lower().str.contains(query) |
                 df_display['Lot 번호'].astype(str).str.lower().str.contains(query)
             )
             df_display = df_display[mask]
             
-        # (v42/v27 방식: data_editor + column_config)
+        # (v44/v27 방식: data_editor + column_config)
         st.data_editor( 
             df_display,
             use_container_width=True,
@@ -505,6 +533,9 @@ with tab3:
                 ),
                 "알림 무시": st.column_config.TextColumn(
                     "알림 무시"
+                ),
+                "제조사": st.column_config.TextColumn( # (v44 신규)
+                    "제조사"
                 ),
             }
         )
