@@ -2,24 +2,23 @@ import streamlit as st
 import gspread 
 import json 
 import base64 
-# ▼▼▼ [수정됨] v47: 최신 인증 라이브러리로 변경 (v25 방식) ▼▼▼
-from google.oauth2.service_account import Credentials 
+from oauth2client.service_account import ServiceAccountCredentials 
 import pandas as pd 
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v47", layout="wide")
-st.title("🔬 실험실 재고 관리기 v47")
+st.set_page_config(page_title="실험실 재고 관리기 v49", layout="wide")
+st.title("🔬 실험실 재고 관리기 v49")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v46과 동일)
+# (v47과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# ▼▼▼ [수정됨] v47: (v25 방식) get_gspread_client 함수 수정 ▼▼▼
+# (1) 인증된 '클라이언트' 생성 (v47과 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -27,34 +26,21 @@ def get_gspread_client():
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
         ]
-        
         if 'gcp_json_base64' in st.secrets:
-            # (배포용 코드: Base64)
             base64_string = st.secrets["gcp_json_base64"]
             json_string = base64.b64decode(base64_string).decode("utf-8")
             creds_dict = json.loads(json_string) 
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
-            # (로컬 테스트용 코드: .streamlit/secrets.toml)
-            # (v46과 달리 'gcreds.json'이 아닌 'secrets.toml'을 읽도록 시도)
-            # (v20의 TOML 방식 Secrets를 로컬에서 사용)
-            creds_dict = st.secrets["connections"]["gsheets"] 
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-            
+            creds = ServiceAccountCredentials.from_service_account_file('.streamlit/secrets.toml', scope)
         client = gspread.authorize(creds)
         return client, None
-        
     except FileNotFoundError:
         return None, "로컬 Secrets 파일('.streamlit/secrets.toml')을 찾을 수 없습니다."
-    except KeyError:
-         # (로컬 테스트용) 'secrets.toml'에 [connections.gsheets]가 없는 경우
-         return None, "로컬 Secrets 파일('.streamlit/secrets.toml')에 [connections.gsheets] 섹션이 없습니다."
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
-# ▲▲▲ [수정됨] v47 ▲▲▲
 
-
-# (2) 마스터 DB 로드 함수 (v46과 동일)
+# (2) 마스터 DB 로드 함수 (v47과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -119,7 +105,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v46과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v47과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -157,10 +143,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v46과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v47과 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v46 탭1 코드 전체 생략 - 동일) ...
+    # ... (v47 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -252,10 +238,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v46과 동일) ---
+# --- 5. 탭 2: 시약 사용 (v47과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v46 탭2 코드 전체 생략 - 동일) ...
+    # ... (v47 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client) 
@@ -345,7 +331,7 @@ with tab2:
                     st.session_state.usage_qty_input,
                     st.session_state.usage_user,
                     st.session_state.usage_notes,
-                    usage_date, # (v46 콜백 버그 수정: date 전달)
+                    usage_date, 
                     current_stock,
                     unit
                 )
@@ -357,18 +343,22 @@ with tab2:
             del st.session_state.form2_message
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v46과 동일) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v49 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
-    # ... (v46 탭3 코드 전체 생략 - 동일) ...
+
     if st.button("새로고침 (Refresh Data)"):
         st.cache_data.clear() 
         st.rerun()
+
+    # 1. 데이터 로드 (v47과 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
+
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
+        # 2. 총 사용량 계산 (v47과 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -377,17 +367,22 @@ with tab3:
         else:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
+
+        # ▼▼▼ [수정됨] v49: 컬럼 통합 (v46 방식) ▼▼▼
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
-        df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
-        df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
+        # (v47의 '재고 비율 (Bar)', '재고 %' 삭제)
+        # ▲▲▲ [수정됨] v49 ▲▲▲
+        
+        # 5. 자동 알림 (v47과 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
         df_inventory['유통기한'] = df_inventory['유통기한'].fillna(pd.NaT) 
+        
         expiring_soon = df_inventory[
             (df_inventory['유통기한'] >= today) &
             (df_inventory['유통기한'] <= (today + pd.DateOffset(days=expiry_threshold_days))) &
@@ -409,6 +404,7 @@ with tab3:
             expired_display = expired.copy()
             expired_display['유통기한'] = expired_display['유통기한'].dt.strftime('%Y-%m-%d')
             st.dataframe(expired_display[['제품명', 'Lot 번호', '유통기한', '보관 위치', '현재 재고']], use_container_width=True)
+        
         low_stock = df_inventory[
             (df_inventory['현재 재고'] <= df_inventory['알림 기준 수량']) &
             (df_inventory['현재 재고'] > 0) &
@@ -424,16 +420,22 @@ with tab3:
         if not out_of_stock.empty:
             st.error(f"**재고 소진 (0 이하)**")
             st.dataframe(out_of_stock[['제품명', 'Lot 번호', '현재 재고', '단위']], use_container_width=True)
+            
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
+        
+        # (v47의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
+        
         if not out_of_stock.empty:
             mute_options = [
                 f"{row['제품명']} / Lot: {row['Lot 번호']}" for index, row in out_of_stock.iterrows()
             ]
             mute_options.insert(0, "알림을 해제할 품목을 선택하세요...") 
+            
             selected_item_to_mute = st.selectbox("재고 소진 품목 알림 해제:", options=mute_options)
+            
             if st.button("➡️ 이 품목 알림 해제하기"):
                 if selected_item_to_mute == mute_options[0]:
                     st.warning("알림을 해제할 품목을 선택하세요.")
@@ -460,24 +462,34 @@ with tab3:
                         st.error(f"알림 해제 중 오류 발생: {e}")
         else:
             st.info("현재 알림을 해제할 '재고 소진' 품목이 없습니다.")
+            
         st.divider()
+
+        # --- 6. 전체 재고 현황 (v49 수정됨) ---
         st.subheader("전체 재고 현황")
+        
         search_query = st.text_input(
             "🔎 전체 재고 검색 (제품명, Cat. No., Lot 번호)", 
             placeholder="DMEM, 1111, 2222dd 등으로 검색..."
         )
+        
+        # (v48 방식: 컬럼 통합)
         display_columns = [
             "제품명", "제조사", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
-            "재고 비율 (Bar)", "재고 %", 
+            "재고 비율 (%)", 
             "알림 기준 수량", "알림 무시", 
             "유통기한", "보관 위치", "등록자", "등록 날짜"
         ]
+        
         available_columns = [col for col in display_columns if col in df_inventory.columns]
+        
         if '유통기한' in available_columns:
             df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
+            
         df_display = df_inventory[available_columns] 
+        
         if search_query:
             query = search_query.lower() 
             mask = (
@@ -487,20 +499,19 @@ with tab3:
                 df_display['Lot 번호'].astype(str).str.lower().str.contains(query)
             )
             df_display = df_display[mask]
+            
+        # ▼▼▼ [수정됨] v49: v48 방식 (ProgressColumn + 포맷팅) ▼▼▼
         st.data_editor( 
             df_display,
             use_container_width=True,
             disabled=True, 
+            
             column_config={
-                "재고 비율 (Bar)": st.column_config.ProgressColumn(
-                    "재고 비율", 
-                    format="", # (숫자 숨김)
+                "재고 비율 (%)": st.column_config.ProgressColumn(
+                    "재고 비율 (%)",  
+                    format="%.1f%%", # (소수점 첫째 자리 % 표시)
                     min_value=0,
                     max_value=100,
-                ),
-                "재고 %": st.column_config.NumberColumn(
-                    "%", 
-                    format="%.1f%%", # % 표시
                 ),
                 "현재 재고": st.column_config.NumberColumn(
                     "현재 재고",
@@ -522,27 +533,4 @@ with tab3:
                 ),
             }
         )
-        st.divider()
-        st.subheader("📈 상세 사용 이력 (검색된 품목)")
-        if not search_query:
-            st.info("상세 이력을 보려면 위 검색창에서 품목을 검색하세요.")
-        else:
-            if df_display.empty:
-                st.warning("검색된 품목이 없습니다.")
-            else:
-                products_to_show = df_display['제품명'].unique()
-                lots_to_show = df_display['Lot 번호'].unique()
-                log_mask = (
-                    df_log['제품명'].isin(products_to_show) &
-                    df_log['Lot 번호'].isin(lots_to_show)
-                )
-                df_log_filtered = df_log[log_mask]
-                if df_log_filtered.empty:
-                    st.warning("검색된 품목에 대한 사용 기록(Usage Log)이 없습니다.")
-                else:
-                    df_log_filtered = df_log_filtered.sort_values(by="Timestamp", ascending=False)
-                    df_log_filtered['Timestamp (YYYY-MM-DD)'] = df_log_filtered['Timestamp'].dt.strftime('%Y-%m-%d %H:%M')
-                    st.dataframe(
-                        df_log_filtered[['Timestamp (YYYY-MM-DD)', '제품명', 'Lot 번호', '사용자', '사용량', '비고']], 
-                        use_container_width=True
-                    )
+        # ▲▲▲ [수정됨] v49 ▲▲▲
