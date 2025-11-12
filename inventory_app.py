@@ -1,20 +1,3 @@
-네, 알겠습니다. "시약 사용" 폼에서 [사용 기록하기] 버튼을 누른 뒤, '사용한 양'만 초기화하고 '사용자 이름'과 '비고' 란은 그대로 유지하도록 v45 코드로 수정했습니다.
-
-이렇게 하면, 같은 사용자가 같은 실험(비고)으로 여러 품목을 연속해서 기록할 때 훨씬 편리해집니다.
-
-(수정) '탭 2 (시약 사용)'의 st.form에서 clear_on_submit=True를 제거했습니다.
-
-(수정) st.session_state를 사용하여 '사용자 이름'과 '비고' 값을 기억하도록 변경했습니다.
-
-(수정) [사용 기록하기] 버튼을 눌러 저장이 성공하면, '사용한 양'의 값만 0.0으로 리셋하고 '사용자 이름'과 '비고'는 유지합니다.
-
-('탭 1 (새 품목 등록)'은 요청하신 '사용자 이름'과 '비고' 란이 없으므로, 기존의 clear_on_submit=True (등록 후 초기화) 방식을 유지했습니다.)
-
-requirements.txt 파일은 matplotlib이 없는 4줄짜리(streamlit, gspread, oauth2client, pandas)를 그대로 사용하시면 됩니다.
-
-🐍 재고 관리기 v45 (사용자/비고 값 유지)
-Python
-
 import streamlit as st
 import gspread 
 import json 
@@ -596,3 +579,4 @@ with tab3:
                         df_log_filtered[['Timestamp (YYYY-MM-DD)', '제품명', 'Lot 번호', '사용자', '사용량', '비고']], 
                         use_container_width=True
                     )
+
