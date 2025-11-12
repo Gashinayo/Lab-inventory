@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v47", layout="wide")
-st.title("🔬 실험실 재고 관리기 v47")
+st.set_page_config(page_title="실험실 재고 관리기 v48", layout="wide")
+st.title("🔬 실험실 재고 관리기 v48")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v45와 동일)
+# (v47과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v45와 동일)
+# (1) 인증된 '클라이언트' 생성 (v47과 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v45와 동일)
+# (2) 마스터 DB 로드 함수 (v47과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -105,7 +105,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v45와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v47과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -141,10 +141,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v45와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v47과 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v45 탭1 코드 전체 생략 - 동일) ...
+    # ... (v47 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -236,10 +236,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v45와 동일) ---
+# --- 5. 탭 2: 시약 사용 (v47과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v45 탭2 코드 전체 생략 - 동일) ...
+    # ... (v47 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client) 
@@ -320,7 +320,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v47 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v48 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -328,14 +328,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v45와 동일)
+    # 1. 데이터 로드 (v47과 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v45와 동일)
+        # 2. 총 사용량 계산 (v47과 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -345,18 +345,17 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # (v45 방식: 컬럼 분리)
+        # ▼▼▼ [수정됨] v48: 컬럼 통합 (v46 방식) ▼▼▼
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
-        # ▼▼▼ [수정됨] v47: v45의 '재고 비율 (Bar)'와 '재고 %' 두 줄로 복구 ▼▼▼
-        df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
-        df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
-        # ▲▲▲ [수정됨] v47 ▲▲▲
+        df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
+        # (v47의 '재고 비율 (Bar)', '재고 %' 삭제)
+        # ▲▲▲ [수정됨] v48 ▲▲▲
         
-        # 5. 자동 알림 (v45와 동일)
+        # 5. 자동 알림 (v47과 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
@@ -403,7 +402,7 @@ with tab3:
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
         
-        # (v45의 알림 해제 섹션)
+        # (v47의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
         
@@ -435,7 +434,7 @@ with tab3:
                         if not target_rows:
                             st.error(f"시트에서 '{selected_item_to_mute}'을(를) 찾지 못했습니다. (데이터 확인 필요)")
                         else:
-                            # (v45: L열(12)로 '알림 무시' 컬럼 위치 변경)
+                            # (v47: L열(12)로 '알림 무시' 컬럼 위치 변경)
                             for row_index in target_rows:
                                 sheet_db.update_cell(row_index, 12, "예") # 12 = L열
                             
@@ -450,7 +449,7 @@ with tab3:
             
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v47 수정됨) ---
+        # --- 6. 전체 재고 현황 (v48 수정됨) ---
         st.subheader("전체 재고 현황")
         
         search_query = st.text_input(
@@ -458,11 +457,11 @@ with tab3:
             placeholder="DMEM, 1111, 2222dd 등으로 검색..."
         )
         
-        # (v45 방식: 컬럼 분리)
+        # ▼▼▼ [수정됨] v48: "재고 %" 컬럼 삭제 ▼▼▼
         display_columns = [
             "제품명", "제조사", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
-            "재고 비율 (Bar)", "재고 %", 
+            "재고 비율 (%)", # (v47의 "재고 비율 (Bar)" -> 원본 컬럼 사용)
             "알림 기준 수량", "알림 무시", 
             "유통기한", "보관 위치", "등록자", "등록 날짜"
         ]
@@ -485,25 +484,21 @@ with tab3:
             )
             df_display = df_display[mask]
             
-        # (v45/v27 방식: data_editor + column_config)
+        # (v47/v27 방식: data_editor + column_config)
         st.data_editor( 
             df_display,
             use_container_width=True,
             disabled=True, 
             
             column_config={
-                # ▼▼▼ [수정됨] v47: 요청 1, 2, 3 반영 ▼▼▼
-                "재고 비율 (Bar)": st.column_config.ProgressColumn(
+                # ▼▼▼ [수정됨] v48: (요청 1, 2) 제목 변경 및 숫자 서식 ▼▼▼
+                "재고 비율 (%)": st.column_config.ProgressColumn(
                     "재고 비율 (%)",  # (Request 2: 제목 변경)
-                    format="",       # (Request 1: 숫자 숨김)
+                    format="%.1f%%", # (Request 1: 소수점 첫째 자리 %)
                     min_value=0,
                     max_value=100,
                 ),
-                "재고 %": st.column_config.NumberColumn(
-                    "%",             # (Request 3: 컬럼 유지)
-                    format="%.1f%%", # (숫자 표시)
-                ),
-                # ▲▲▲ [수정됨] v47 ▲▲▲
+                # (Request 2: "재고 %" 컬럼 삭제됨)
                 
                 "현재 재고": st.column_config.NumberColumn(
                     "현재 재고",
@@ -525,3 +520,4 @@ with tab3:
                 ),
             }
         )
+        # ▲▲▲ [수정됨] v48 ▲▲▲
