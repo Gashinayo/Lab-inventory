@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v42", layout="wide")
-st.title("🔬 실험실 재고 관리기 v42")
+st.set_page_config(page_title="실험실 재고 관리기 v43", layout="wide")
+st.title("🔬 실험실 재고 관리기 v43")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v41과 동일)
+# (v42와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v41과 동일)
+# (1) 인증된 '클라이언트' 생성 (v42와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v41과 동일)
+# (2) 마스터 DB 로드 함수 (v42와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -105,7 +105,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v41과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v42와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -143,10 +143,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v41과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v42와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v41 탭1 코드 전체 생략 - 동일) ...
+    # ... (v42 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -238,7 +238,7 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v42 수정됨) ---
+# --- 5. 탭 2: 시약 사용 (v43 수정됨) ---
 with tab2:
     st.header("📉 시약 사용 기록")
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
@@ -262,10 +262,8 @@ with tab2:
         else:
             selected_lot = st.selectbox("Lot 번호*", options=["제품명을 먼저 선택하세요"])
         
-        # ▼▼▼ [신규] v42: 사용 일자 선택 (폼 바깥) ▼▼▼
-        usage_date = st.date_input("사용 일자", value=datetime.now().date())
-        # ▲▲▲ [신규] v42 ▲▲▲
-
+        # (v42의 '사용 일자' input 삭제)
+        
         current_stock = 0.0 
         unit = ""
         alert_level = 0.0 
@@ -295,6 +293,11 @@ with tab2:
         with st.form(key="usage_form", clear_on_submit=True):
             usage_qty = st.number_input("사용한 양*", min_value=0.0, step=1.0, format="%.2f")
             user = st.text_input("사용자 이름*")
+            
+            # ▼▼▼ [수정됨] v43: '사용 일자'를 폼 내부, '사용자 이름' 아래로 이동 ▼▼▼
+            usage_date = st.date_input("사용 일자", value=datetime.now().date())
+            # ▲▲▲ [수정됨] v43 ▲▲▲
+            
             notes = st.text_area("비고 (실험명 등)")
             submit_usage_button = st.form_submit_button(label="📉 사용 기록하기")
 
@@ -317,7 +320,7 @@ with tab2:
                     sh_log = client.open(USAGE_LOG_NAME)
                     sheet_log = sh_log.worksheet(USAGE_LOG_TAB)
                     
-                    # ▼▼▼ [신규] v42: 선택한 사용 일자(usage_date) + 현재 시간으로 Timestamp 생성 ▼▼▼
+                    # (v42의 Timestamp 생성 로직은 그대로 사용)
                     log_timestamp = datetime.combine(usage_date, datetime.now().time())
                     
                     log_data_list = [
@@ -328,7 +331,6 @@ with tab2:
                         user,
                         notes
                     ]
-                    # ▲▲▲ [신규] v42 ▲▲▲
                     
                     sheet_log.append_row(log_data_list)
                     st.session_state.form2_status = "success"
@@ -340,7 +342,7 @@ with tab2:
             st.rerun()
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v41과 동일) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v42와 동일) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -348,14 +350,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v41과 동일)
+    # 1. 데이터 로드 (v42와 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v41과 동일)
+        # 2. 총 사용량 계산 (v42와 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -365,7 +367,7 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # (v41 방식: 컬럼 분리)
+        # (v42 방식: 컬럼 분리)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
@@ -374,7 +376,7 @@ with tab3:
         df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
         df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
         
-        # 5. 자동 알림 (v41과 동일)
+        # 5. 자동 알림 (v42와 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
@@ -421,7 +423,7 @@ with tab3:
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
         
-        # (v41의 알림 해제 섹션)
+        # (v42의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
         
@@ -462,7 +464,7 @@ with tab3:
             
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v41과 동일) ---
+        # --- 6. 전체 재고 현황 (v42와 동일) ---
         st.subheader("전체 재고 현황")
         
         search_query = st.text_input(
@@ -496,7 +498,7 @@ with tab3:
             )
             df_display = df_display[mask]
             
-        # (v41/v27 방식: data_editor + column_config)
+        # (v42/v27 방식: data_editor + column_config)
         st.data_editor( 
             df_display,
             use_container_width=True,
@@ -533,4 +535,27 @@ with tab3:
                 ),
             }
         )
-
+        
+        # (v42의 상세 사용 이력 섹션)
+        st.divider()
+        st.subheader("📈 상세 사용 이력 (검색된 품목)")
+        
+        if not search_query:
+            st.info("상세 이력을 보려면 위 검색창에서 품목을 검색하세요.")
+        else:
+            query = search_query.lower()
+            log_mask = (
+                df_log['제품명'].astype(str).str.lower().str.contains(query) |
+                df_log['Lot 번호'].astype(str).str.lower().str.contains(query)
+            )
+            df_log_filtered = df_log[log_mask]
+            
+            if df_log_filtered.empty:
+                st.warning("검색된 품목에 대한 사용 기록(Usage Log)이 없습니다.")
+            else:
+                df_log_filtered = df_log_filtered.sort_values(by="Timestamp", ascending=False)
+                df_log_filtered['Timestamp (YYYY-MM-DD)'] = df_log_filtered['Timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+                st.dataframe(
+                    df_log_filtered[['Timestamp (YYYY-MM-DD)', '사용자', '사용량', '비고']], 
+                    use_container_width=True
+                )
