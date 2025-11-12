@@ -7,18 +7,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v49", layout="wide")
-st.title("🔬 실험실 재고 관리기 v49")
+st.set_page_config(page_title="실험실 재고 관리기 v50", layout="wide")
+st.title("🔬 실험실 재고 관리기 v50")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v47과 동일)
+# (v49와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v47과 동일)
+# (1) 인증된 '클라이언트' 생성 (v49와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +40,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v47과 동일)
+# (2) 마스터 DB 로드 함수 (v49와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -105,7 +105,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v47과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v49와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -143,10 +143,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v47과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v49와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v47 탭1 코드 전체 생략 - 동일) ...
+    # ... (v49 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -238,10 +238,10 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v47과 동일) ---
+# --- 5. 탭 2: 시약 사용 (v49와 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v47 탭2 코드 전체 생략 - 동일) ...
+    # ... (v49 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
     df_db = load_reagent_db(client) 
@@ -343,7 +343,7 @@ with tab2:
             del st.session_state.form2_message
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v49 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v50 수정됨) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -351,14 +351,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v47과 동일)
+    # 1. 데이터 로드 (v49와 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v47과 동일)
+        # 2. 총 사용량 계산 (v49와 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -368,16 +368,15 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # ▼▼▼ [수정됨] v49: 컬럼 통합 (v46 방식) ▼▼▼
+        # (v49 방식: 컬럼 통합)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
             axis=1
         )
-        # (v47의 '재고 비율 (Bar)', '재고 %' 삭제)
-        # ▲▲▲ [수정됨] v49 ▲▲▲
+        df_inventory['재고 비율 (%)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
         
-        # 5. 자동 알림 (v47과 동일)
+        # 5. 자동 알림 (v49와 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
@@ -424,7 +423,7 @@ with tab3:
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
         
-        # (v47의 알림 해제 섹션)
+        # (v49의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
         
@@ -442,22 +441,28 @@ with tab3:
                 else:
                     try:
                         product_to_mute, lot_to_mute = selected_item_to_mute.split(" / Lot: ")
+                        
                         sh_db = client.open(REAGENT_DB_NAME)
                         sheet_db = sh_db.worksheet(REAGENT_DB_TAB)
+                        
                         all_data = sheet_db.get_all_records()
                         target_rows = []
                         for i, record in enumerate(all_data):
                             if (str(record['제품명']) == product_to_mute and 
                                 str(record['Lot 번호']) == lot_to_mute):
                                 target_rows.append(i + 2) 
+                        
                         if not target_rows:
                             st.error(f"시트에서 '{selected_item_to_mute}'을(를) 찾지 못했습니다. (데이터 확인 필요)")
                         else:
+                            # (v49: L열(12)로 '알림 무시' 컬럼 위치 변경)
                             for row_index in target_rows:
                                 sheet_db.update_cell(row_index, 12, "예") # 12 = L열
+                            
                             st.success(f"✅ '{product_to_mute}' (Lot: {lot_to_mute}) 품목이 알림에서 해제되었습니다.")
                             st.cache_data.clear()
                             st.rerun()
+
                     except Exception as e:
                         st.error(f"알림 해제 중 오류 발생: {e}")
         else:
@@ -465,15 +470,38 @@ with tab3:
             
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v49 수정됨) ---
+        # --- 6. 전체 재고 현황 (v50 수정됨) ---
         st.subheader("전체 재고 현황")
         
-        search_query = st.text_input(
-            "🔎 전체 재고 검색 (제품명, Cat. No., Lot 번호)", 
-            placeholder="DMEM, 1111, 2222dd 등으로 검색..."
+        # ▼▼▼ [신규] v50: 고급 필터 (v48) ▼▼▼
+        st.write("**고급 필터**")
+        col1, col2 = st.columns(2)
+        
+        # (제조사 필터)
+        all_manufacturers = sorted(df_inventory['제조사'].dropna().unique())
+        selected_manufacturers = col1.multiselect(
+            "제조사 필터:",
+            options=all_manufacturers,
+            default=all_manufacturers
         )
         
-        # (v48 방식: 컬럼 통합)
+        # (보관 위치 필터)
+        all_locations = sorted(df_inventory['보관 위치'].dropna().unique())
+        selected_locations = col2.multiselect(
+            "보관 위치 필터:",
+            options=all_locations,
+            default=all_locations
+        )
+        
+        # (검색창)
+        search_query = st.text_input(
+            "🔎 빠른 검색 (제품명, Cat. No., Lot 번호)", 
+            placeholder="DMEM, 1111, 2222dd 등으로 검색..."
+        )
+        # ▲▲▲ [신규] v50 ▲▲▲
+
+        
+        # (v49 방식: 컬럼 통합)
         display_columns = [
             "제품명", "제조사", "Cat. No.", "Lot 번호", 
             "현재 재고", "단위", "최초 수량", "총 사용량",
@@ -488,8 +516,16 @@ with tab3:
             df_inventory['유통기한 (YYYY-MM-DD)'] = df_inventory['유통기한'].dt.strftime('%Y-%m-%d')
             available_columns[available_columns.index('유통기한')] = '유통기한 (YYYY-MM-DD)'
             
+        # ▼▼▼ [수정됨] v50: 필터 로직 적용 ▼▼▼
         df_display = df_inventory[available_columns] 
         
+        # (1. 고급 필터 적용)
+        df_display = df_display[
+            df_display['제조사'].isin(selected_manufacturers) &
+            df_display['보관 위치'].isin(selected_locations)
+        ]
+        
+        # (2. 빠른 검색 적용)
         if search_query:
             query = search_query.lower() 
             mask = (
@@ -499,8 +535,9 @@ with tab3:
                 df_display['Lot 번호'].astype(str).str.lower().str.contains(query)
             )
             df_display = df_display[mask]
+        # ▲▲▲ [수정됨] v50 ▲▲▲
             
-        # ▼▼▼ [수정됨] v49: v48 방식 (ProgressColumn + 포맷팅) ▼▼▼
+        # (v49 방식: data_editor + column_config)
         st.data_editor( 
             df_display,
             use_container_width=True,
@@ -509,7 +546,7 @@ with tab3:
             column_config={
                 "재고 비율 (%)": st.column_config.ProgressColumn(
                     "재고 비율 (%)",  
-                    format="%.1f%%", # (소수점 첫째 자리 % 표시)
+                    format="%.1f%%", # (소수점 첫째 자리 %)
                     min_value=0,
                     max_value=100,
                 ),
@@ -533,4 +570,32 @@ with tab3:
                 ),
             }
         )
-        # ▲▲▲ [수정됨] v49 ▲▲▲
+        
+        # (v49의 상세 사용 이력 섹션)
+        st.divider()
+        st.subheader("📈 상세 사용 이력 (필터링된 품목)")
+        
+        if df_display.empty:
+            if search_query or (len(selected_manufacturers) < len(all_manufacturers)) or (len(selected_locations) < len(all_locations)):
+                st.warning("선택된 필터/검색어에 해당하는 품목이 없습니다.")
+            else:
+                st.info("상세 이력을 보려면 위 검색창에서 품목을 검색하세요.")
+        else:
+            products_to_show = df_display['제품명'].unique()
+            lots_to_show = df_display['Lot 번호'].unique()
+            
+            log_mask = (
+                df_log['제품명'].isin(products_to_show) &
+                df_log['Lot 번호'].isin(lots_to_show)
+            )
+            df_log_filtered = df_log[log_mask]
+        
+            if df_log_filtered.empty:
+                st.info("선택된 품목에 대한 사용 기록(Usage Log)이 없습니다.")
+            else:
+                df_log_filtered = df_log_filtered.sort_values(by="Timestamp", ascending=False)
+                df_log_filtered['Timestamp (YYYY-MM-DD)'] = df_log_filtered['Timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+                st.dataframe(
+                    df_log_filtered[['Timestamp (YYYY-MM-DD)', '제품명', 'Lot 번호', '사용자', '사용량', '비고']], 
+                    use_container_width=True
+                )
