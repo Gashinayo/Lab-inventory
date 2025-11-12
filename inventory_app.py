@@ -2,45 +2,59 @@ import streamlit as st
 import gspread 
 import json 
 import base64 
-from oauth2client.service_account import ServiceAccountCredentials 
+# ▼▼▼ [수정됨] v47: 최신 인증 라이브러리로 변경 (v25 방식) ▼▼▼
+from google.oauth2.service_account import Credentials 
 import pandas as pd 
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v46", layout="wide")
-st.title("🔬 실험실 재고 관리기 v46")
+st.set_page_config(page_title="실험실 재고 관리기 v47", layout="wide")
+st.title("🔬 실험실 재고 관리기 v47")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v45와 동일)
+# (v46과 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v45와 동일)
+# ▼▼▼ [수정됨] v47: (v25 방식) get_gspread_client 함수 수정 ▼▼▼
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
         scope = [
-            'https.www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
         ]
+        
         if 'gcp_json_base64' in st.secrets:
+            # (배포용 코드: Base64)
             base64_string = st.secrets["gcp_json_base64"]
             json_string = base64.b64decode(base64_string).decode("utf-8")
             creds_dict = json.loads(json_string) 
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
         else:
-            creds = ServiceAccountCredentials.from_service_account_file('.streamlit/secrets.toml', scope)
+            # (로컬 테스트용 코드: .streamlit/secrets.toml)
+            # (v46과 달리 'gcreds.json'이 아닌 'secrets.toml'을 읽도록 시도)
+            # (v20의 TOML 방식 Secrets를 로컬에서 사용)
+            creds_dict = st.secrets["connections"]["gsheets"] 
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+            
         client = gspread.authorize(creds)
         return client, None
+        
     except FileNotFoundError:
         return None, "로컬 Secrets 파일('.streamlit/secrets.toml')을 찾을 수 없습니다."
+    except KeyError:
+         # (로컬 테스트용) 'secrets.toml'에 [connections.gsheets]가 없는 경우
+         return None, "로컬 Secrets 파일('.streamlit/secrets.toml')에 [connections.gsheets] 섹션이 없습니다."
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
+# ▲▲▲ [수정됨] v47 ▲▲▲
 
-# (2) 마스터 DB 로드 함수 (v45와 동일)
+
+# (2) 마스터 DB 로드 함수 (v46과 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -105,7 +119,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v45와 동일)
+# (3) 사용 기록(Log) 로드 함수 (v46과 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -119,7 +133,7 @@ def load_usage_log(_client):
         
         required_cols = ["제품명", "Lot 번호", "사용량", "Timestamp", "사용자", "비고"]
         if not all(col in df.columns for col in required_cols):
-             st.error(f"Usage_Log 'Log' 탭에 {required_cols} 컬럼이 모두 필요합니다. (1행 헤더 확인)")
+             st.error("Usage_Log 'Log' 탭에 '제품명', 'Lot 번호', '사용량' 컬럼이 없습니다. (1행 헤더 확인)")
              return pd.DataFrame(columns=required_cols)
         
         df['제품명'] = df['제품명'].astype(str)
@@ -143,10 +157,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v45와 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v46과 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v45 탭1 코드 전체 생략 - 동일) ...
+    # ... (v46 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -238,22 +252,20 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v46 수정됨) ---
+# --- 5. 탭 2: 시약 사용 (v46과 동일) ---
 with tab2:
     st.header("📉 시약 사용 기록")
+    # ... (v46 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
-
     df_db = load_reagent_db(client) 
     df_log = load_usage_log(client) 
-    
     if df_db.empty:
         st.error("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다. '새 품목 등록' 탭에서 먼저 품목을 등록하세요.")
     else:
         st.subheader("1. 사용할 품목 선택")
         all_products = sorted(df_db['제품명'].dropna().unique())
         selected_product = st.selectbox("사용한 제품명*", options=all_products)
-        
         if selected_product:
             available_lots = sorted(
                 df_db[df_db['제품명'] == selected_product]['Lot 번호'].dropna().unique()
@@ -261,11 +273,9 @@ with tab2:
             selected_lot = st.selectbox("Lot 번호*", options=available_lots)
         else:
             selected_lot = st.selectbox("Lot 번호*", options=["제품명을 먼저 선택하세요"])
-        
         current_stock = 0.0 
         unit = ""
         alert_level = 0.0 
-        
         if selected_product and selected_lot:
             try:
                 item_info = df_db[
@@ -284,21 +294,14 @@ with tab2:
                 st.info(f"**현재 남은 재고:** {current_stock:.2f} {unit} (총 입고: {initial_stock:.2f} {unit} / 알림 기준: {alert_level:.2f} {unit})")
             except (IndexError, TypeError, KeyError):
                 st.warning("재고를 계산할 수 없습니다. (마스터DB/로그 확인)")
-        
         st.divider()
         st.subheader("2. 사용 정보 입력")
-        
-        # ▼▼▼ [수정됨] v46: 콜백 함수 정의 ▼▼▼
-        
-        # (1) Session state 초기화
         if "usage_qty_input" not in st.session_state:
             st.session_state.usage_qty_input = 0.0
         if "usage_user" not in st.session_state:
             st.session_state.usage_user = ""
         if "usage_notes" not in st.session_state:
             st.session_state.usage_notes = ""
-
-        # (2) 콜백 함수 (모든 로직이 이 안으로 이동)
         def submit_usage_callback(product, lot, qty, user, notes, date, stock, unit_str):
             if not all([product, lot, qty > 0, user]):
                 st.session_state.form2_status = "error"
@@ -324,22 +327,15 @@ with tab2:
                     st.session_state.form2_status = "success"
                     st.session_state.form2_message = f"✅ **{product} (Lot: {lot})** 사용 기록이 저장되었습니다!"
                     st.cache_data.clear() 
-                    
-                    # (성공 시 '사용한 양'만 초기화)
                     st.session_state.usage_qty_input = 0.0
-                    # (사용자/비고는 유지)
-
                 except Exception as e:
                     st.session_state.form2_status = "error"
                     st.session_state.form2_message = f"Google Sheet 저장 실패: {e}"
-        
-        # (3) 폼 생성
         with st.form(key="usage_form"):
             usage_qty = st.number_input("사용한 양*", min_value=0.0, step=1.0, format="%.2f", key="usage_qty_input")
             user = st.text_input("사용자 이름*", key="usage_user") 
             usage_date = st.date_input("사용 일자", value=datetime.now().date())
             notes = st.text_area("비고 (실험명 등)", key="usage_notes")
-            
             submit_usage_button = st.form_submit_button(
                 label="📉 사용 기록하기",
                 on_click=submit_usage_callback,
@@ -349,28 +345,22 @@ with tab2:
                     st.session_state.usage_qty_input,
                     st.session_state.usage_user,
                     st.session_state.usage_notes,
+                    usage_date, # (v46 콜백 버그 수정: date 전달)
                     current_stock,
                     unit
                 )
             )
-
-        # (4) 폼 바깥에서 메시지 처리
         if "form2_status" in st.session_state:
-            if st.session_state.form2_status == "success":
-                st.success(st.session_state.form2_message)
-            else:
-                st.error(st.session_state.form2_message)
+            if st.session_state.form2_status == "success": st.success(st.session_state.form2_message)
+            else: st.error(st.session_state.form2_message)
             del st.session_state.form2_status
             del st.session_state.form2_message
-        
-        # (v45의 'if submit_button:' 로직은 콜백으로 이동했으므로 삭제)
-        # ▲▲▲ [수정됨] v46 ▲▲▲
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v45와 동일) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v46과 동일) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
-    # ... (v45 탭3 코드 전체 생략 - 동일) ...
+    # ... (v46 탭3 코드 전체 생략 - 동일) ...
     if st.button("새로고침 (Refresh Data)"):
         st.cache_data.clear() 
         st.rerun()
