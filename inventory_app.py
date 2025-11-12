@@ -1,3 +1,20 @@
+네, 알겠습니다. "시약 사용" 폼에서 [사용 기록하기] 버튼을 누른 뒤, '사용한 양'만 초기화하고 '사용자 이름'과 '비고' 란은 그대로 유지하도록 v45 코드로 수정했습니다.
+
+이렇게 하면, 같은 사용자가 같은 실험(비고)으로 여러 품목을 연속해서 기록할 때 훨씬 편리해집니다.
+
+(수정) '탭 2 (시약 사용)'의 st.form에서 clear_on_submit=True를 제거했습니다.
+
+(수정) st.session_state를 사용하여 '사용자 이름'과 '비고' 값을 기억하도록 변경했습니다.
+
+(수정) [사용 기록하기] 버튼을 눌러 저장이 성공하면, '사용한 양'의 값만 0.0으로 리셋하고 '사용자 이름'과 '비고'는 유지합니다.
+
+('탭 1 (새 품목 등록)'은 요청하신 '사용자 이름'과 '비고' 란이 없으므로, 기존의 clear_on_submit=True (등록 후 초기화) 방식을 유지했습니다.)
+
+requirements.txt 파일은 matplotlib이 없는 4줄짜리(streamlit, gspread, oauth2client, pandas)를 그대로 사용하시면 됩니다.
+
+🐍 재고 관리기 v45 (사용자/비고 값 유지)
+Python
+
 import streamlit as st
 import gspread 
 import json 
@@ -7,18 +24,18 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 앱의 기본 설정 ---
-st.set_page_config(page_title="실험실 재고 관리기 v44", layout="wide")
-st.title("🔬 실험실 재고 관리기 v44")
+st.set_page_config(page_title="실험실 재고 관리기 v45", layout="wide")
+st.title("🔬 실험실 재고 관리기 v45")
 st.write("새 품목을 등록하고, 사용량을 기록하며, 재고 현황을 확인합니다.")
 
 # --- 2. Google Sheets 인증 및 설정 ---
-# (v41과 동일)
+# (v44와 동일)
 REAGENT_DB_NAME = "Reagent_DB"  
 REAGENT_DB_TAB = "Master"       
 USAGE_LOG_NAME = "Usage_Log"    
 USAGE_LOG_TAB = "Log"           
 
-# (1) 인증된 '클라이언트' 생성 (v41과 동일)
+# (1) 인증된 '클라이언트' 생성 (v44와 동일)
 @st.cache_resource(ttl=600)
 def get_gspread_client():
     try:
@@ -40,7 +57,7 @@ def get_gspread_client():
     except Exception as e:
         return None, f"Google 인증 실패: {e}"
 
-# (2) 마스터 DB 로드 함수 (v41과 동일)
+# (2) 마스터 DB 로드 함수 (v44와 동일)
 @st.cache_data(ttl=60) 
 def load_reagent_db(_client):
     try:
@@ -105,7 +122,7 @@ def load_reagent_db(_client):
         st.error(f"Reagent_DB 로드 실패: {e}")
         return pd.DataFrame(columns=["제품명", "제조사", "Cat. No.", "Lot 번호", "최초 수량", "단위", "유통기한", "알림 기준 수량", "알림 무시"])
 
-# (3) 사용 기록(Log) 로드 함수 (v41과 동일)
+# (3) 사용 기록(Log) 로드 함수 (v44와 동일)
 @st.cache_data(ttl=60)
 def load_usage_log(_client):
     try:
@@ -143,10 +160,10 @@ if auth_error_msg:
 tab1, tab2, tab3 = st.tabs(["📝 새 품목 등록", "📉 시약 사용", "📊 대시보드 (재고 현황)"])
 
 
-# --- 4. 탭 1: 새 품목 등록 (v41과 동일) ---
+# --- 4. 탭 1: 새 품목 등록 (v44와 동일) ---
 with tab1:
     st.header("📝 새 시약/소모품 등록")
-    # ... (v41 탭1 코드 전체 생략 - 동일) ...
+    # ... (v44 탭1 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{REAGENT_DB_NAME}'** 시트의 **'{REAGENT_DB_TAB}'** 탭에 저장됩니다.")
     df_db_copy = load_reagent_db(client) 
     copied_data = {}
@@ -238,20 +255,22 @@ with tab1:
         st.rerun()
 
 
-# --- 5. 탭 2: 시약 사용 (v41과 동일) ---
+# --- 5. 탭 2: 시약 사용 (v45 수정됨) ---
 with tab2:
     st.header("📉 시약 사용 기록")
-    # ... (v41 탭2 코드 전체 생략 - 동일) ...
     st.write(f"이 폼을 제출하면 **'{USAGE_LOG_NAME}'** 시트의 **'{USAGE_LOG_TAB}'** 탭에 저장됩니다.")
     st.divider()
+
     df_db = load_reagent_db(client) 
     df_log = load_usage_log(client) 
+    
     if df_db.empty:
         st.error("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다. '새 품목 등록' 탭에서 먼저 품목을 등록하세요.")
     else:
         st.subheader("1. 사용할 품목 선택")
         all_products = sorted(df_db['제품명'].dropna().unique())
         selected_product = st.selectbox("사용한 제품명*", options=all_products)
+        
         if selected_product:
             available_lots = sorted(
                 df_db[df_db['제품명'] == selected_product]['Lot 번호'].dropna().unique()
@@ -260,11 +279,10 @@ with tab2:
         else:
             selected_lot = st.selectbox("Lot 번호*", options=["제품명을 먼저 선택하세요"])
         
-        usage_date = st.date_input("사용 일자", value=datetime.now().date())
-        
         current_stock = 0.0 
         unit = ""
         alert_level = 0.0 
+        
         if selected_product and selected_lot:
             try:
                 item_info = df_db[
@@ -283,24 +301,47 @@ with tab2:
                 st.info(f"**현재 남은 재고:** {current_stock:.2f} {unit} (총 입고: {initial_stock:.2f} {unit} / 알림 기준: {alert_level:.2f} {unit})")
             except (IndexError, TypeError, KeyError):
                 st.warning("재고를 계산할 수 없습니다. (마스터DB/로그 확인)")
+        
         st.divider()
         st.subheader("2. 사용 정보 입력")
-        with st.form(key="usage_form", clear_on_submit=True):
-            usage_qty = st.number_input("사용한 양*", min_value=0.0, step=1.0, format="%.2f")
-            user = st.text_input("사용자 이름*")
-            notes = st.text_area("비고 (실험명 등)")
+        
+        # ▼▼▼ [수정됨] v45: clear_on_submit=False (기본값) 및 session_state 사용 ▼▼▼
+        
+        # (1) Session state 초기화
+        if "usage_user" not in st.session_state:
+            st.session_state.usage_user = ""
+        if "usage_notes" not in st.session_state:
+            st.session_state.usage_notes = ""
+        
+        with st.form(key="usage_form"): # (clear_on_submit=False)
+            usage_qty = st.number_input("사용한 양*", min_value=0.0, step=1.0, format="%.2f", key="usage_qty_input")
+            # (key를 사용해 session state에 바인딩)
+            user = st.text_input("사용자 이름*", key="usage_user") 
+            usage_date = st.date_input("사용 일자", value=datetime.now().date())
+            notes = st.text_area("비고 (실험명 등)", key="usage_notes")
+            
             submit_usage_button = st.form_submit_button(label="📉 사용 기록하기")
+
+        # (폼 바깥에서 메시지 처리)
         if "form2_status" in st.session_state:
-            if st.session_state.form2_status == "success": st.success(st.session_state.form2_message)
-            else: st.error(st.session_state.form2_message)
+            if st.session_state.form2_status == "success":
+                st.success(st.session_state.form2_message)
+            else:
+                st.error(st.session_state.form2_message)
             del st.session_state.form2_status
             del st.session_state.form2_message
+            
         if submit_usage_button:
-            if not all([selected_product, selected_lot, usage_qty > 0, user]):
+            # (폼에서 값이 아닌 session_state에서 값을 가져옴)
+            qty_val = st.session_state.usage_qty_input
+            user_val = st.session_state.usage_user
+            notes_val = st.session_state.usage_notes
+
+            if not all([selected_product, selected_lot, qty_val > 0, user_val]):
                 st.session_state.form2_status = "error"
                 st.session_state.form2_message = "필수 항목(*)을 모두 입력해야 합니다. (사용량은 0보다 커야 함)"
-            elif float(usage_qty) > current_stock:
-                shortage = float(usage_qty) - current_stock
+            elif float(qty_val) > current_stock:
+                shortage = float(qty_val) - current_stock
                 st.session_state.form2_status = "error"
                 st.session_state.form2_message = f"⚠️ 재고 부족! 현재 재고({current_stock:.2f} {unit})보다 {shortage:.2f} {unit} 만큼 더 많이 입력했습니다."
             else:
@@ -312,21 +353,28 @@ with tab2:
                         log_timestamp.strftime("%Y-%m-%d %H:%M:%S"), 
                         str(selected_product), 
                         str(selected_lot),     
-                        float(usage_qty),      
-                        user,
-                        notes
+                        float(qty_val),      
+                        user_val,
+                        notes_val
                     ]
                     sheet_log.append_row(log_data_list)
                     st.session_state.form2_status = "success"
                     st.session_state.form2_message = f"✅ **{selected_product} (Lot: {selected_lot})** 사용 기록이 저장되었습니다!"
                     st.cache_data.clear() 
+                    
+                    # (성공 시 '사용한 양'만 초기화)
+                    st.session_state.usage_qty_input = 0.0
+
                 except Exception as e:
                     st.session_state.form2_status = "error"
                     st.session_state.form2_message = f"Google Sheet 저장 실패: {e}"
+            
+            # (폼 초기화 및 메시지 표시를 위해 rerun)
             st.rerun()
+        # ▲▲▲ [수정됨] v45 ▲▲▲
 
 
-# --- 6. 탭 3: 대시보드 (재고 현황) (v44 수정됨) ---
+# --- 6. 탭 3: 대시보드 (재고 현황) (v44와 동일) ---
 with tab3:
     st.header("📊 대시보드 (재고 현황)")
 
@@ -334,14 +382,14 @@ with tab3:
         st.cache_data.clear() 
         st.rerun()
 
-    # 1. 데이터 로드 (v41과 동일)
+    # 1. 데이터 로드 (v44와 동일)
     df_db = load_reagent_db(client)
     df_log = load_usage_log(client)
 
     if df_db.empty:
         st.warning("마스터 DB(Reagent_DB)에 등록된 품목이 없습니다.")
     else:
-        # 2. 총 사용량 계산 (v41과 동일)
+        # 2. 총 사용량 계산 (v44와 동일)
         if not df_log.empty:
             usage_summary = df_log.groupby(['제품명', 'Lot 번호'])['사용량'].sum().reset_index()
             usage_summary = usage_summary.rename(columns={'사용량': '총 사용량'})
@@ -351,7 +399,7 @@ with tab3:
             df_inventory = df_db.copy()
             df_inventory['총 사용량'] = 0.0
 
-        # (v41 방식: 컬럼 분리)
+        # (v44 방식: 컬럼 분리)
         df_inventory['현재 재고'] = df_inventory['최초 수량'] - df_inventory['총 사용량']
         df_inventory['재고 비율 (%)'] = df_inventory.apply(
             lambda row: (row['현재 재고'] / row['최초 수량']) * 100 if row['최초 수량'] > 0 else 0,
@@ -360,7 +408,7 @@ with tab3:
         df_inventory['재고 비율 (Bar)'] = df_inventory['재고 비율 (%)'].clip(0, 100)
         df_inventory['재고 %'] = df_inventory['재고 비율 (%)']
         
-        # 5. 자동 알림 (v41과 동일)
+        # 5. 자동 알림 (v44와 동일)
         st.subheader("🚨 자동 알림")
         expiry_threshold_days = 30
         today = pd.to_datetime(datetime.now().date()) 
@@ -407,7 +455,7 @@ with tab3:
         if expiring_soon.empty and expired.empty and low_stock.empty and out_of_stock.empty:
             st.success("✅ 모든 재고가 양호합니다!")
         
-        # (v41의 알림 해제 섹션)
+        # (v44의 알림 해제 섹션)
         st.divider()
         st.subheader("🗃️ 품목 보관 (알림 해제)")
         
@@ -448,7 +496,7 @@ with tab3:
             
         st.divider()
 
-        # --- 6. 전체 재고 현황 (v44 수정됨) ---
+        # --- 6. 전체 재고 현황 (v44와 동일) ---
         st.subheader("전체 재고 현황")
         
         search_query = st.text_input(
@@ -482,7 +530,7 @@ with tab3:
             )
             df_display = df_display[mask]
             
-        # (v41/v27 방식: data_editor + column_config)
+        # (v44/v27 방식: data_editor + column_config)
         st.data_editor( 
             df_display,
             use_container_width=True,
@@ -520,25 +568,19 @@ with tab3:
             }
         )
         
-        # (v41의 상세 사용 이력 섹션)
+        # (v44의 상세 사용 이력 섹션)
         st.divider()
         st.subheader("📈 상세 사용 이력 (검색된 품목)")
         
         if not search_query:
             st.info("상세 이력을 보려면 위 검색창에서 품목을 검색하세요.")
         else:
-            # ▼▼▼ [수정됨] v44: (v41의 버그 수정) ▼▼▼
-            # (df_log에서 검색하는 것이 아니라, df_display (필터링된 결과)의
-            # '제품명'과 'Lot 번호'를 가져와서 df_log를 필터링합니다.)
-            
             if df_display.empty:
                 st.warning("검색된 품목이 없습니다.")
             else:
-                # (1) 검색 결과에서 제품명/Lot번호 목록 추출
                 products_to_show = df_display['제품명'].unique()
                 lots_to_show = df_display['Lot 번호'].unique()
                 
-                # (2) Usage_Log에서 해당 조합 필터링
                 log_mask = (
                     df_log['제품명'].isin(products_to_show) &
                     df_log['Lot 번호'].isin(lots_to_show)
@@ -554,4 +596,3 @@ with tab3:
                         df_log_filtered[['Timestamp (YYYY-MM-DD)', '제품명', 'Lot 번호', '사용자', '사용량', '비고']], 
                         use_container_width=True
                     )
-            # ▲▲▲ [수정됨] v44 ▲▲▲
